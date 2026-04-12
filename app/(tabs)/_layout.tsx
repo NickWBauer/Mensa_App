@@ -1,4 +1,4 @@
-import { Ionicons, } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from 'expo-router';
 import React from 'react';
 
@@ -17,7 +17,7 @@ const TabsLayout = () => {
             paddingTop: 10,
         },
         tabBarLabelStyle: {
-            fontSize: 12,
+            fontSize: 10,
             fontWeight: "600",
         },
         headerShown: false,
@@ -37,6 +37,22 @@ const TabsLayout = () => {
                 title:"Settings",
                 tabBarIcon: ({color, size}) => 
                     <Ionicons name ='settings' size={size} color={color}/>
+            }}
+        />
+        <Tabs.Screen 
+            name="impressum"
+            options = {{
+                title:"Impressum",
+                tabBarIcon: ({color, size}) => 
+                    <Ionicons name ='information-circle' size={size} color={color}/>
+            }}
+        />
+        <Tabs.Screen 
+            name="mittagsmenu"
+            options = {{
+                title:"Mittagsgerichte",
+                tabBarIcon: ({color, size}) => 
+                    <Ionicons name ='pizza' size={size} color={color}/>
             }}
         />
     </Tabs>

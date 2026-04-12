@@ -5,7 +5,7 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <Text style = {styles.content} >Edit app/index.tsx to edit this screen.</Text>
-      <Text>hihoha</Text>
+      <Text>hihoha </Text>
 
     </View>
   );
