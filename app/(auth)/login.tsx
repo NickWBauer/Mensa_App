@@ -6,10 +6,11 @@ import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 export default function login() {
 
     const [username, setUsername] = React.useState('');
+    const [email, setEmail] = React.useState('');
     const [password, setPassword] = React.useState('');
     const [loading, setLoading] = React.useState(false);
 
-    async function onSignOutButtonPress() {
+    async function signInWithEmail() {
             const {error} = await supabase.auth.signInWithPassword({
                 email: username,
                 password: password
@@ -25,9 +26,9 @@ export default function login() {
         <View>
             <View>
                 <TextInput
-                    onChangeText={(text) => setEmail(text)}
-                    value={email}
-                    placeholder="email@address.com"
+                    onChangeText={(text) => setUsername(text)}
+                    value={username}
+                    placeholder="Username"
                     autoCapitalize="none"
                 />
             </View>
