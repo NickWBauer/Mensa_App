@@ -1,43 +1,29 @@
 import { supabase } from '@/lib/supabase';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import React from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function login() {
-
-    
+    const router = useRouter();
     const [username, setUsername] = React.useState('');
     const [password, setPassword] = React.useState('');
-    const [name, setName] = React.useState('');
     const [loading, setLoading] = React.useState(false);
 
     async function signUpWithEmail() {
             const {error} = await supabase.auth.signUp({
-                email: username,
+                email: username + "@hs-esslingen.de",
                 password: password,
-                options: {
-                    data: {
-                        full_name: name
-                    }
-                }
             });
             if (error) {
                 console.log('Error signing up:', error.message);
+                setLoading(false);
+            } else {
+                router.push('/set-name');
             }
-            setLoading(false);
-
         }
 
      return (
         <View>
-            <View>
-                <TextInput
-                    onChangeText={(text) => setName(text)}
-                    value={name}
-                    placeholder="Name"
-                    
-                />
-            </View>
             <View>
                 <TextInput
                     onChangeText={(text) => setUsername(text)}
@@ -63,10 +49,11 @@ export default function login() {
                     <Text>SIGN UP</Text>
                 </TouchableOpacity>
                 <Link href="/(auth)/login">
-                    <Text>Sign In</Text>
+                    <Text>Already registered? Sign In</Text>
                 </Link>
             </View>
         </View>
     );
 }
-// Hier aufgehört 16.04.2026
+// T: Hier aufgehört 16.04.2026
+// N: Überarbeitet am 21.04.2026 - Anmeldung mit Username durch automatische Ergänzung der E-Mail-Domain "@hs-esslingen.de" ermöglicht.

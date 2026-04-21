@@ -8,7 +8,7 @@ export default function _layout() {
     }}>
         <Stack.Screen name="login"/>
         <Stack.Screen name="register"/>
-
+        <Stack.Screen name="set-name"/>
     </Stack>
 
   );

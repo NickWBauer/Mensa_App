@@ -12,7 +12,7 @@ export default function login() {
 
     async function signInWithEmail() {
             const {error} = await supabase.auth.signInWithPassword({
-                email: username,
+                email: username + "@hs-esslingen.de",
                 password: password
             });
             if (error) {

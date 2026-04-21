@@ -12,13 +12,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     const fetchClaims = async () => {
       setIsLoading(true)
 
-      const { data, error } = await supabase.auth.getClaims()
+      const { data: { session }, error } = await supabase.auth.getSession()
 
       if (error) {
-        console.error('Error fetching claims:', error)
+        console.error('Error fetching session:', error)
       }
 
-      setClaims(data?.claims ?? null)
+      setClaims(session?.user?.id ? { sub: session.user.id } : null)
       setIsLoading(false)
     }
 
@@ -34,9 +34,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         setIsLoading(false)
       return
     }
-      const { data } = await supabase.auth.getClaims()
-      console.log('Claims nach State Change:', data?.claims)
-      setClaims(data?.claims ?? null)
+      console.log('Session nach State Change:', _session?.user?.id)
+      setClaims(_session?.user?.id ? { sub: _session.user.id } : null)
       setIsLoading(false)
 
     })
