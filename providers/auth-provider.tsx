@@ -28,8 +28,17 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, _session) => {
       console.log('Auth state changed:', { event: _event })
+      //Bei Sign Out werden Claims(Hintergrunddaten) direkt aktualisiert, behebt Sign-Out Fehler
+      if (_event === 'SIGNED_OUT') {
+        setClaims(null)
+        setIsLoading(false)
+      return
+    }
       const { data } = await supabase.auth.getClaims()
+      console.log('Claims nach State Change:', data?.claims)
       setClaims(data?.claims ?? null)
+      setIsLoading(false)
+
     })
 
     // Cleanup subscription on unmount

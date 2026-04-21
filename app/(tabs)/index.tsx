@@ -1,5 +1,6 @@
 import { useAuthContext } from "@/hooks/use-auth-context";
 import { supabase } from "@/lib/supabase";
+import { Stack } from "expo-router";
 import { Button, StyleSheet, Text, View } from "react-native";
 
 export default function Index() {
@@ -10,6 +11,7 @@ export default function Index() {
         if (error) {
             console.log('Error signing out:', error.message);
         }
+        <Stack.Screen name="(auth)" options={{headerShown: true}} />
     }
 
     return (
