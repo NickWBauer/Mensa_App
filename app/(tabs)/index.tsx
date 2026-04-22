@@ -8,7 +8,7 @@ export default function Index() {
     const { profile, isLoggedIn } = useAuthContext();
     const router = useRouter();
 
-    // Wenn nicht eingeloggt -> zur Auth-Seite navigieren
+    // Wenn nicht eingeloggt -> zur Auth-Seite navigieren test
     React.useEffect(() => {
         if (isLoggedIn === false) {
             router.replace('/(auth)/login');
