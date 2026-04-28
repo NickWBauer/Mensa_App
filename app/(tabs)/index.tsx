@@ -1,3 +1,4 @@
+import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from "@/hooks/use-auth-context";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "expo-router";
@@ -23,28 +24,34 @@ export default function Index() {
     }
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.welcomeText}>
-                Willkommen{profile?.full_name ? `, ${profile.full_name}` : ''}!
-            </Text>
-            <Text style={styles.content}>
-                Du bist erfolgreich in der Mensa-App angemeldet.
-            </Text>
-            <TouchableOpacity style={styles.button} onPress={onSignOutButtonPress}>
-                <Text style={styles.buttonText}>Abmelden</Text>
-            </TouchableOpacity>
+        <View style={styles.outerContainer}>
+            <LogoHeader />
+            <View style={styles.container}>
+                <Text style={styles.welcomeText}>
+                    Willkommen{profile?.full_name ? `, ${profile.full_name}` : ''}!
+                </Text>
+                <Text style={styles.content}>
+                    Du bist erfolgreich in der Mensa-App angemeldet.
+                </Text>
+                <TouchableOpacity style={styles.button} onPress={onSignOutButtonPress}>
+                    <Text style={styles.buttonText}>Abmelden</Text>
+                </TouchableOpacity>
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
+    outerContainer: {
+        flex: 1,
+        backgroundColor: '#f8f9fa',
+    },
     container: {
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
         gap: 20,
         padding: 20,
-        backgroundColor: '#f8f9fa',
     },
     welcomeText: {
         fontSize: 24,
@@ -54,7 +61,7 @@ const styles = StyleSheet.create({
     },
     content: {
         fontSize: 16,
-        color: '#666666',
+        color: '#000000',
         textAlign: 'center',
         lineHeight: 24,
     },

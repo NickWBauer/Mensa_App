@@ -18,7 +18,7 @@ console.log('RootNavigator:', { isLoggedIn, isLoading, profile })
   if (isLoggedIn && profile?.full_name) {
     return (
       <Stack>
-        <Stack.Screen name="(tabs)" options={{headerShown: true}} />
+        <Stack.Screen name="(tabs)" options={{headerShown: false}} />
       </Stack>
     );
   }
@@ -27,7 +27,7 @@ console.log('RootNavigator:', { isLoggedIn, isLoading, profile })
   if (isLoggedIn && !profile?.full_name) {
     return (
       <Stack>
-        <Stack.Screen name="set-name" options={{headerShown: true}} />
+        <Stack.Screen name="set-name" options={{headerShown: false}} />
       </Stack>
     );
   }
@@ -35,7 +35,7 @@ console.log('RootNavigator:', { isLoggedIn, isLoading, profile })
   // Wenn nicht eingeloggt -> Auth
   return (
     <Stack>
-      <Stack.Screen name="(auth)" options={{headerShown: true}} />
+      <Stack.Screen name="(auth)" options={{headerShown: false}} />
     </Stack>
   );
 }

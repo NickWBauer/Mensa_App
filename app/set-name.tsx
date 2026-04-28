@@ -1,3 +1,4 @@
+import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
@@ -96,7 +97,7 @@ export default function SetName() {
   const [loading, setLoading] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
   const router = useRouter();
-  const { claims } = useAuthContext();
+  const { claims, refetchProfile } = useAuthContext();
 
   async function saveName() {
     if (!name.trim()) {
@@ -115,6 +116,7 @@ export default function SetName() {
       if (error) {
         console.log('Error saving name:', error.message);
       } else {
+        await refetchProfile(); // Refetch the profile to update the context
         router.replace('/(tabs)');
       }
     } catch (err) {
@@ -129,8 +131,10 @@ export default function SetName() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-      <View style={styles.contentContainer}>
+    <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+      <LogoHeader />
+      <ScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+        <View style={styles.contentContainer}>
         <Text style={styles.welcomeText}>Hey du! 👋</Text>
 
         <Text style={styles.descriptionText}>
@@ -167,6 +171,7 @@ export default function SetName() {
           </TouchableOpacity>
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
