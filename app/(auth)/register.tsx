@@ -134,7 +134,7 @@ export default function login() {
                 <Text style={styles.buttonText}>{loading ? 'Wird registriert...' : 'Registrieren'}</Text>
               </TouchableOpacity>
               
-              <Link href="/(auth)/login" asChild>
+              <Link href="/(auth)/login-intern" asChild>
                 <TouchableOpacity>
                   <Text style={styles.linkText}>Bereits registriert? Jetzt anmelden</Text>
                 </TouchableOpacity>

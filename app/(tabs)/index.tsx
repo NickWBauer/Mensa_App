@@ -12,7 +12,7 @@ export default function Index() {
     // Wenn nicht eingeloggt -> zur Auth-Seite navigieren
     React.useEffect(() => {
         if (isLoggedIn === false) {
-            router.replace('/(auth)/login');
+            router.replace('/(auth)/login-intern');
         }
     }, [isLoggedIn, router]);
 

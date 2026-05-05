@@ -6,9 +6,12 @@ export default function _layout() {
     <Stack screenOptions={{
       headerShown: false,
     }}>
-        <Stack.Screen name="login"/>
-        <Stack.Screen name="register"/>
-        <Stack.Screen name="set-name"/>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="welcome" />
+        <Stack.Screen name="login-intern" />
+        <Stack.Screen name="login-extern" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="set-name" />
     </Stack>
 
   );
