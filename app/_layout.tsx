@@ -14,20 +14,11 @@ console.log('RootNavigator:', { isLoggedIn, isLoading, profile })
     return <ActivityIndicator />;
   }
 
-  // Wenn eingeloggt und Profil vollständig -> Tabs
-  if (isLoggedIn && profile?.full_name) {
+  // Wenn eingeloggt -> Tabs
+  if (isLoggedIn) {
     return (
       <Stack>
-        <Stack.Screen name="(tabs)" options={{headerShown: true}} />
-      </Stack>
-    );
-  }
-
-  // Wenn eingeloggt aber Profil unvollständig -> Name setzen
-  if (isLoggedIn && !profile?.full_name) {
-    return (
-      <Stack>
-        <Stack.Screen name="set-name" options={{headerShown: true}} />
+        <Stack.Screen name="(tabs)" options={{headerShown: false}} />
       </Stack>
     );
   }
@@ -35,7 +26,7 @@ console.log('RootNavigator:', { isLoggedIn, isLoading, profile })
   // Wenn nicht eingeloggt -> Auth
   return (
     <Stack>
-      <Stack.Screen name="(auth)" options={{headerShown: true}} />
+      <Stack.Screen name="(auth)" options={{headerShown: false}} />
     </Stack>
   );
 }

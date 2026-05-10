@@ -65,6 +65,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     fetchProfile()
   }, [claims])
 
+  const refetchProfile = async () => {
+    if (claims) {
+      const { data } = await supabase.from('profiles').select('*').eq('id', claims.sub).single()
+      setProfile(data)
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -72,7 +79,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         isLoading,
         profile,
         isLoggedIn: claims != null,
-      }}
+        refetchProfile,
+              }}
     >
       {children}
     </AuthContext.Provider>
