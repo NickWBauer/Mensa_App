@@ -10,15 +10,17 @@ export default function login() {
     const [password, setPassword] = React.useState('');
     const [loading, setLoading] = React.useState(false);
     const [showPassword, setShowPassword] = React.useState(false);
+    const [errorMessage, setErrorMessage] = React.useState('');
 
     async function signInWithEmail() {
         setLoading(true);
+        setErrorMessage('');
         const { error } = await supabase.auth.signInWithPassword({
             email: username + "@hs-esslingen.de",
             password: password
         });
         if (error) {
-            console.log('Error signing in:', error.message);
+            setErrorMessage('Benutzername oder Passwort ist falsch.');
         }
         setLoading(false);
     }
@@ -92,6 +94,10 @@ export default function login() {
                                 {loading ? 'Wird angemeldet...' : 'Anmelden'}
                             </Text>
                         </TouchableOpacity>
+
+                        {errorMessage ? (
+                            <Text style={styles.errorText}>{errorMessage}</Text>
+                        ) : null}
 
                         <View style={styles.divider} />
 
@@ -247,5 +253,12 @@ const styles = StyleSheet.create({
     externalBoxText: {
         fontSize: 14,
         color: '#444444',
+    },
+    errorText: {
+        width: '100%',
+        color: '#cc0000',
+        fontSize: 14,
+        marginBottom: 12,
+        textAlign: 'center',
     },
 });

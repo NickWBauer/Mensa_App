@@ -1,8 +1,7 @@
 import LogoHeader from '@/components/logo-header';
-import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function Welcome() {
   return (
@@ -16,7 +15,7 @@ export default function Welcome() {
 
         <Link href="/(auth)/login-intern" asChild>
           <TouchableOpacity style={styles.ssoBox}>
-            <Ionicons name="lock-closed" size={110} color="#ffffff" style={styles.icon} />
+            <Image source={require('@/assets/images/Moodle_Schloss.png')} style={styles.icon} />
             <Text style={styles.ssoText}>SSO-Login</Text>
             <Text style={styles.ssoSubText}>mit Ihrem Hochschulaccount</Text>
           </TouchableOpacity>
@@ -29,7 +28,6 @@ export default function Welcome() {
           </TouchableOpacity>
         </Link>
 
-        <Text style={styles.helpText}>Help</Text>
 
       </ScrollView>
     </View>
@@ -77,7 +75,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   icon: {
+    width: 110,
+    height: 110,
     marginBottom: 16,
+    resizeMode: 'contain',
   },
   ssoText: {
     fontSize: 22,
@@ -108,10 +109,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#eeeeee',
     marginTop: 4,
-  },
-  helpText: {
-    fontSize: 16,
-    color: '#0066cc',
-    fontStyle: 'italic',
   },
 });

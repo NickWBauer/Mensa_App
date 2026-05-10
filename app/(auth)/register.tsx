@@ -88,8 +88,6 @@ export default function login() {
             if (error) {
                 console.log('Error signing up:', error.message);
                 setLoading(false);
-            } else {
-                router.push('/set-name');
             }
         }
 

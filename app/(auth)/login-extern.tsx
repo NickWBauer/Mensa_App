@@ -10,15 +10,17 @@ export default function Login2() {
     const [password, setPassword] = React.useState('');
     const [loading, setLoading] = React.useState(false);
     const [showPassword, setShowPassword] = React.useState(false);
+    const [errorMessage, setErrorMessage] = React.useState('');
 
     async function signInWithEmail() {
         setLoading(true);
+        setErrorMessage('');
         const { error } = await supabase.auth.signInWithPassword({
             email: email,
             password: password,
         });
         if (error) {
-            console.log('Error signing in:', error.message);
+            setErrorMessage('E-Mail oder Passwort ist falsch.');
         }
         setLoading(false);
     }
@@ -89,6 +91,10 @@ export default function Login2() {
                                 {loading ? 'Wird angemeldet...' : 'Anmelden'}
                             </Text>
                         </TouchableOpacity>
+
+                        {errorMessage ? (
+                            <Text style={styles.errorText}>{errorMessage}</Text>
+                        ) : null}
 
                         <TouchableOpacity>
                             <Text style={styles.forgotText}>Kennwort vergessen?</Text>
@@ -243,5 +249,11 @@ const styles = StyleSheet.create({
     externalBoxText: {
         fontSize: 14,
         color: '#444444',
+    },
+    errorText: {
+        width: '100%',
+        color: '#cc0000',
+        fontSize: 14,
+        marginBottom: 12,
     },
 });

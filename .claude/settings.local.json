@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:moodle.hs-esslingen.de)"
+      "WebFetch(domain:moodle.hs-esslingen.de)",
+      "WebFetch(domain:openmensa.org)",
+      "WebFetch(domain:www.studierendenwerk-stuttgart.de)",
+      "WebFetch(domain:www.sw-stuttgart.de)",
+      "WebFetch(domain:www.hs-esslingen.de)"
     ]
   }
 }
