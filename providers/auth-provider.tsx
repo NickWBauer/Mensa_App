@@ -1,74 +1,49 @@
 import { AuthContext } from '@/hooks/use-auth-context'
 import { supabase } from '@/lib/supabase'
+import { deleteItemAsync, setItemAsync } from 'expo-secure-store'
 import { PropsWithChildren, useEffect, useState } from 'react'
+
+const SESSION_KEY = 'mensa_rz_kennung'
 
 export default function AuthProvider({ children }: PropsWithChildren) {
   const [claims, setClaims] = useState<Record<string, any> | undefined | null>()
   const [profile, setProfile] = useState<any>()
+  const [isVerified, setIsVerified] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
-  // Fetch the claims once, and subscribe to auth state changes
+  const loadProfile = async (rzKennung: string) => {
+    const [{ data: student }, { data: registered }] = await Promise.all([
+      supabase.from('StudentenHochschule').select('*').eq('RZ-Kennung', rzKennung).single(),
+      supabase.from('RegistriertePersonen').select('id').eq('RZ-Kennung', rzKennung).maybeSingle(),
+    ])
+    setProfile(student)
+    setIsVerified(!!registered)
+  }
+
   useEffect(() => {
-    const fetchClaims = async () => {
-      setIsLoading(true)
-
-      const { data: { session }, error } = await supabase.auth.getSession()
-
-      if (error) {
-        console.error('Error fetching session:', error)
-      }
-
-      setClaims(session?.user?.id ? { sub: session.user.id } : null)
-      setIsLoading(false)
-    }
-
-    fetchClaims()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, _session) => {
-      console.log('Auth state changed:', { event: _event })
-      //Bei Sign Out werden Claims(Hintergrunddaten) direkt aktualisiert, behebt Sign-Out Fehler
-      if (_event === 'SIGNED_OUT') {
-        setClaims(null)
-        setIsLoading(false)
-      return
-    }
-      console.log('Session nach State Change:', _session?.user?.id)
-      setClaims(_session?.user?.id ? { sub: _session.user.id } : null)
-      setIsLoading(false)
-
-    })
-
-    // Cleanup subscription on unmount
-    return () => {
-      subscription.unsubscribe()
-    }
+    setClaims(null)
+    setIsLoading(false)
   }, [])
 
-  // Fetch the profile when the claims change
-  useEffect(() => {
-    const fetchProfile = async () => {
-      setIsLoading(true)
+  const signIn = async (rzKennung: string) => {
+    await setItemAsync(SESSION_KEY, rzKennung)
+    setClaims({ sub: rzKennung })
+    await loadProfile(rzKennung)
+  }
 
-      if (claims) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', claims.sub).single()
-
-        setProfile(data)
-      } else {
-        setProfile(null)
-      }
-
-      setIsLoading(false)
-    }
-
-    fetchProfile()
-  }, [claims])
+  const signOut = async () => {
+    await Promise.all([
+      deleteItemAsync(SESSION_KEY),
+      supabase.auth.signOut(),
+    ])
+    setClaims(null)
+    setProfile(null)
+    setIsVerified(false)
+  }
 
   const refetchProfile = async () => {
-    if (claims) {
-      const { data } = await supabase.from('profiles').select('*').eq('id', claims.sub).single()
-      setProfile(data)
+    if (claims?.sub) {
+      await loadProfile(claims.sub)
     }
   }
 
@@ -79,10 +54,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         isLoading,
         profile,
         isLoggedIn: claims != null,
+        isVerified,
+        signIn,
+        signOut,
         refetchProfile,
-              }}
+      }}
     >
       {children}
     </AuthContext.Provider>
-  );
+  )
 }

@@ -1,32 +1,22 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 export default function Profil() {
-  const { profile, claims } = useAuthContext();
-  const [email, setEmail] = useState<string>('');
-  const router = useRouter();
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email) setEmail(data.user.email);
-    });
-  }, []);
+  const { profile, claims, signOut } = useAuthContext();
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.replace('/(auth)');
+    await signOut();
   }
 
-  const vorname = profile?.vorname ?? '';
-  const nachname = profile?.nachname ?? '';
-  const matrikelnr = profile?.matrikelnr ?? '';
-  const studiengang = profile?.studiengang ?? '';
-  const qrValue = claims?.sub ?? 'unbekannt';
+  const vorname = profile?.Vorname ?? '';
+  const nachname = profile?.Nachname ?? '';
+  const matrikelnr = profile?.Matrikelnummer?.toString() ?? '';
+  const email = profile?.['E-Mail'] ?? '';
+  const rzKennung = profile?.['RZ-Kennung'] ?? '';
+  const qrValue = rzKennung || claims?.sub || 'unbekannt';
 
   return (
     <View style={styles.container}>
@@ -39,8 +29,7 @@ export default function Profil() {
             <Row label="Vorname:" value={vorname} />
             <Row label="Nachname:" value={nachname} />
             <Row label="Matrikelnr.:" value={matrikelnr} />
-            <Row label="Studiengang:" value={studiengang} />
-            <Row label="E-Mail:" value={email} highlight />
+<Row label="E-Mail:" value={email} highlight />
           </View>
         </View>
 
