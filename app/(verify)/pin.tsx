@@ -1,6 +1,7 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
+import { setItemAsync } from 'expo-secure-store';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -54,7 +55,7 @@ export default function VerifyPin() {
     setLoading(true);
     setError('');
 
-    const { error: verifyError } = await supabase.auth.verifyOtp({
+    const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
       email,
       token: pin.trim(),
       type: 'email',
@@ -64,6 +65,14 @@ export default function VerifyPin() {
       setError('Ungültiger oder abgelaufener PIN.');
       setLoading(false);
       return;
+    }
+
+    // Tokens für spätere Bestellungen speichern
+    if (verifyData.session) {
+      await Promise.all([
+        setItemAsync('mensa_access_token', verifyData.session.access_token),
+        setItemAsync('mensa_refresh_token', verifyData.session.refresh_token),
+      ]).catch(() => {});
     }
 
     // In RegistriertePersonen eintragen → gilt als verifiziert
