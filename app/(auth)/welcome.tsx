@@ -28,6 +28,13 @@ export default function Welcome() {
           </TouchableOpacity>
         </Link>
 
+        <Link href="/(auth)/register" asChild>
+         <TouchableOpacity style={styles.registerButton}>
+            <Text style={styles.registerText}>Registrierung</Text>
+            <Text style={styles.registerSubText}> wenn Sie die App zum ersten Mal benutzen</Text>
+          </TouchableOpacity>
+          </Link>
+
 
       </ScrollView>
     </View>
@@ -110,4 +117,26 @@ const styles = StyleSheet.create({
     color: '#eeeeee',
     marginTop: 4,
   },
+  registerButton: {
+  width: '100%',
+  maxWidth: 300,
+  backgroundColor: '#4CAF50',
+  borderRadius: 12,
+  paddingVertical: 18,
+  alignItems: 'center',
+  marginBottom: 40,
+},
+
+registerText: {
+  fontSize: 18,
+  fontWeight: '600',
+  color: '#ffffff',
+},
+
+registerSubText: {
+  fontSize: 12,
+  color: '#e8f5e9',
+  marginTop: 4,
+  textAlign: 'center',
+},
 });

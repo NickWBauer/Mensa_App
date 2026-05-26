@@ -56,7 +56,7 @@ export default function Index() {
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <View style={styles.card}>
           <Text style={styles.contentText}>
-            Herzlich Willkommen auf der Bestellapp der Hochschule Esslingen!
+            Herzlich Willkommen auf der Bestellapp der Hochschule Esslingen! 
 
             {'\n\n'}Hier können Sie bequem Ihre Mahlzeiten vorbestellen, Ihren Speiseplan einsehen, Ihr Guthaben verwalten und Ihren persönlichen QR‑Code abrufen.
 
