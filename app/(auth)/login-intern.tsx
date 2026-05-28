@@ -21,17 +21,29 @@ export default function login() {
         try {
             const { data: student } = await supabase
                 .from('StudentenHochschule')
-                .select('*')
+                .select('RZ-Kennung')
                 .eq('RZ-Kennung', username)
                 .eq('Passwort', password)
-                .single();
+                .maybeSingle();
 
-            if (!student) {
-                setErrorMessage('Benutzername oder Passwort ist falsch.');
+            if (student) {
+                await signIn(username);
                 return;
             }
 
-            await signIn(username);
+            const { data: admin } = await supabase
+                .from('AdminNutzer')
+                .select('RZ-Kennung')
+                .eq('RZ-Kennung', username)
+                .eq('Passwort', password)
+                .maybeSingle();
+
+            if (admin) {
+                await signIn(username);
+                return;
+            }
+
+            setErrorMessage('Benutzername oder Passwort ist falsch.');
         } catch (e) {
             setErrorMessage('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
         } finally {

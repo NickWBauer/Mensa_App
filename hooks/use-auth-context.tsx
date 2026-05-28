@@ -6,6 +6,7 @@ export type AuthData = {
   isLoading: boolean
   isLoggedIn: boolean
   isVerified: boolean
+  isAdmin: boolean
   signIn: (rzKennung: string) => Promise<void>
   signOut: () => Promise<void>
   refetchProfile: () => Promise<void>
@@ -17,6 +18,7 @@ export const AuthContext = createContext<AuthData>({
   isLoading: true,
   isLoggedIn: false,
   isVerified: false,
+  isAdmin: false,
   signIn: async () => {},
   signOut: async () => {},
   refetchProfile: async () => {},

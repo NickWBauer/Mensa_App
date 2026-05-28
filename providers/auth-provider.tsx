@@ -11,15 +11,25 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [claims, setClaims] = useState<Record<string, any> | undefined | null>()
   const [profile, setProfile] = useState<any>()
   const [isVerified, setIsVerified] = useState<boolean>(false)
+  const [isAdmin, setIsAdmin] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
   const loadProfile = async (rzKennung: string) => {
-    const [{ data: student }, { data: registered }] = await Promise.all([
-      supabase.from('StudentenHochschule').select('*').eq('RZ-Kennung', rzKennung).single(),
+    const [{ data: student }, { data: registered }, { data: admin }] = await Promise.all([
+      supabase.from('StudentenHochschule').select('*').eq('RZ-Kennung', rzKennung).maybeSingle(),
       supabase.from('RegistriertePersonen').select('id').eq('RZ-Kennung', rzKennung).maybeSingle(),
+      supabase.from('AdminNutzer').select('*').eq('RZ-Kennung', rzKennung).maybeSingle(),
     ])
-    setProfile(student)
-    setIsVerified(!!registered)
+
+    if (admin) {
+      setProfile(admin)
+      setIsAdmin(true)
+      setIsVerified(true)
+    } else {
+      setProfile(student)
+      setIsAdmin(false)
+      setIsVerified(!!registered)
+    }
   }
 
   const restoreSupabaseSession = async () => {
@@ -32,7 +42,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
       await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
 
-      // Aktualisierte Tokens nach möglichem Refresh speichern
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.access_token && session?.refresh_token) {
         await Promise.all([
@@ -69,6 +78,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     setClaims(null)
     setProfile(null)
     setIsVerified(false)
+    setIsAdmin(false)
   }
 
   const refetchProfile = async () => {
@@ -85,6 +95,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         profile,
         isLoggedIn: claims != null,
         isVerified,
+        isAdmin,
         signIn,
         signOut,
         refetchProfile,

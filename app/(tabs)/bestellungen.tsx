@@ -379,6 +379,7 @@ function MeineBestellungenContent() {
   const [vergangeneOffen, setVergangeneOffen] = useState(false);
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editMengen, setEditMengen] = useState<Mengenwahl>({ studierende: 0, bedienstete: 0, gaeste: 0 });
+  const [editPreise, setEditPreise] = useState<PreisInfo>({ studierende: '0,00 €', bedienstete: '0,00 €', gaeste: '0,00 €' });
   const [storniereKey, setStorniereKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -464,12 +465,25 @@ function MeineBestellungenContent() {
   const laufende = gruppen.filter(g => !g.isPast);
   const vergangene = gruppen.filter(g => g.isPast).reverse();
 
-  const startEdit = (g: BestellungGruppe) => {
+  const startEdit = async (g: BestellungGruppe) => {
     setEditKey(g.key);
     setEditMengen({
       studierende: g.anzahl_studierende,
       bedienstete: g.anzahl_bedienstete,
       gaeste: g.anzahl_gaeste,
+    });
+
+    const { data: sp } = await supabase
+      .from('Speiseplan')
+      .select('PreisStudierende, PreisBedienstet, PreisGast')
+      .eq('Ausgabedatum', g.bestell_datum)
+      .eq('Gerichtname', g.gericht_name)
+      .maybeSingle();
+
+    setEditPreise({
+      studierende: sp?.PreisStudierende ?? g.preis_studierende,
+      bedienstete: sp?.PreisBedienstet  ?? g.preis_bedienstete,
+      gaeste:      sp?.PreisGast        ?? g.preis_gaeste,
     });
   };
 
@@ -492,9 +506,9 @@ function MeineBestellungenContent() {
     const authUserId = authResult.data?.user?.id ?? null;
 
     const newRows: Omit<BestellungRow, 'id'>[] = [];
-    for (let i = 0; i < editMengen.studierende; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Studierende', preis: g.preis_studierende, image_url: g.image_url, auth_user_id: authUserId as any });
-    for (let i = 0; i < editMengen.bedienstete; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Bedienstete', preis: g.preis_bedienstete, image_url: g.image_url, auth_user_id: authUserId as any });
-    for (let i = 0; i < editMengen.gaeste; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Gäste', preis: g.preis_gaeste, image_url: g.image_url, auth_user_id: authUserId as any });
+    for (let i = 0; i < editMengen.studierende; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Studierende', preis: editPreise.studierende, image_url: g.image_url, auth_user_id: authUserId as any });
+    for (let i = 0; i < editMengen.bedienstete; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Bedienstete', preis: editPreise.bedienstete, image_url: g.image_url, auth_user_id: authUserId as any });
+    for (let i = 0; i < editMengen.gaeste; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Gäste', preis: editPreise.gaeste, image_url: g.image_url, auth_user_id: authUserId as any });
 
     if (newRows.length > 0) {
       const { error: insErr } = await supabase.from('Bestellungen').insert(newRows);
@@ -536,6 +550,7 @@ function MeineBestellungenContent() {
               gruppe={g}
               isEditing={editKey === g.key}
               editMengen={editMengen}
+              editPreise={editKey === g.key ? editPreise : undefined}
               saving={saving}
               onEdit={() => startEdit(g)}
               onSave={() => handleSave(g)}
@@ -592,12 +607,13 @@ function MeineBestellungenContent() {
 }
 
 function BestellungKarte({
-  gruppe: g, isEditing, editMengen, saving, vergangen = false,
+  gruppe: g, isEditing, editMengen, editPreise, saving, vergangen = false,
   onEdit, onSave, onAbbrechen, onStornieren, onMengeChange,
 }: {
   gruppe: BestellungGruppe;
   isEditing: boolean;
   editMengen: Mengenwahl;
+  editPreise?: PreisInfo;
   saving: boolean;
   vergangen?: boolean;
   onEdit?: () => void;
@@ -606,10 +622,14 @@ function BestellungKarte({
   onStornieren?: () => void;
   onMengeChange?: (kat: keyof Mengenwahl, delta: number) => void;
 }) {
+  const preisStud = editPreise?.studierende ?? g.preis_studierende;
+  const preisBed  = editPreise?.bedienstete ?? g.preis_bedienstete;
+  const preisGaes = editPreise?.gaeste      ?? g.preis_gaeste;
+
   const editGesamt = (
-    editMengen.studierende * preisToNumber(g.preis_studierende) +
-    editMengen.bedienstete * preisToNumber(g.preis_bedienstete) +
-    editMengen.gaeste * preisToNumber(g.preis_gaeste)
+    editMengen.studierende * preisToNumber(preisStud) +
+    editMengen.bedienstete * preisToNumber(preisBed) +
+    editMengen.gaeste      * preisToNumber(preisGaes)
   ).toFixed(2).replace('.', ',') + ' €';
 
   return (
@@ -624,9 +644,9 @@ function BestellungKarte({
 
       {isEditing ? (
         <>
-          <MengeRow label="Studierende" preis={g.preis_studierende} wert={editMengen.studierende} onPlus={() => onMengeChange?.('studierende', 1)} onMinus={() => onMengeChange?.('studierende', -1)} />
-          <MengeRow label="Bedienstete" preis={g.preis_bedienstete} wert={editMengen.bedienstete} onPlus={() => onMengeChange?.('bedienstete', 1)} onMinus={() => onMengeChange?.('bedienstete', -1)} />
-          <MengeRow label="Gäste" preis={g.preis_gaeste} wert={editMengen.gaeste} onPlus={() => onMengeChange?.('gaeste', 1)} onMinus={() => onMengeChange?.('gaeste', -1)} />
+          <MengeRow label="Studierende" preis={preisStud} wert={editMengen.studierende} onPlus={() => onMengeChange?.('studierende', 1)} onMinus={() => onMengeChange?.('studierende', -1)} />
+          <MengeRow label="Bedienstete" preis={preisBed}  wert={editMengen.bedienstete} onPlus={() => onMengeChange?.('bedienstete', 1)} onMinus={() => onMengeChange?.('bedienstete', -1)} />
+          <MengeRow label="Gäste"       preis={preisGaes} wert={editMengen.gaeste}       onPlus={() => onMengeChange?.('gaeste', 1)}       onMinus={() => onMengeChange?.('gaeste', -1)} />
           <Text style={styles.kartGesamt}>Gesamt: {editGesamt}</Text>
           <TouchableOpacity style={[styles.primaryBtn, saving && styles.btnDisabled]} onPress={onSave} disabled={saving}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Speichern</Text>}

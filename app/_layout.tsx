@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 function RootNavigator() {
-  const { isLoggedIn, isLoading, isVerified } = useAuthContext();
+  const { isLoggedIn, isLoading, isVerified, isAdmin } = useAuthContext();
   const router = useRouter();
   const segments = useSegments();
 
@@ -16,12 +16,14 @@ function RootNavigator() {
 
     if (!isLoggedIn && currentGroup !== "(auth)") {
       router.replace("/(auth)");
-    } else if (isLoggedIn && !isVerified && currentGroup !== "(verify)") {
+    } else if (isLoggedIn && isAdmin && currentGroup !== "(admin)") {
+      router.replace("/(admin)/uebersicht");
+    } else if (isLoggedIn && !isAdmin && !isVerified && currentGroup !== "(verify)") {
       router.replace("/(verify)/welcome");
-    } else if (isLoggedIn && isVerified && currentGroup !== "(tabs)") {
+    } else if (isLoggedIn && !isAdmin && isVerified && currentGroup !== "(tabs)") {
       router.replace("/(tabs)");
     }
-  }, [isLoggedIn, isLoading, isVerified]);
+  }, [isLoggedIn, isLoading, isVerified, isAdmin]);
 
   if (isLoading) {
     return (
@@ -37,6 +39,7 @@ function RootNavigator() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(verify)" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(admin)" />
     </Stack>
   );
 }
