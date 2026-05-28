@@ -64,6 +64,14 @@ export default function Einmalcode() {
   }
 
   async function verifyCode() {
+    if (password.length < 6) {
+      Alert.alert(
+        'Ungültiges Passwort',
+        'Das Passwort muss mindestens 6 Zeichen lang sein.'
+      );
+      return;
+    }
+
     setLoading(true);
 
     const { data, error } = await supabase.auth.verifyOtp({

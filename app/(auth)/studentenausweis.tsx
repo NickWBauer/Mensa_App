@@ -3,12 +3,12 @@ import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import NfcManager, { NfcTech } from 'react-native-nfc-manager';
 
@@ -29,6 +29,14 @@ export default function Studentenausweis() {
 
       if (!nfcUid) {
         Alert.alert('Fehler', 'Keine NFC-UID gefunden.');
+        return;
+      }
+
+      if (String(password).length < 6) {
+        Alert.alert(
+          'Ungültiges Passwort',
+          'Das Passwort muss mindestens 6 Zeichen lang sein.'
+        );
         return;
       }
 

@@ -1,7 +1,8 @@
 import LogoHeader from '@/components/logo-header';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import React from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,11 +14,38 @@ import {
 export default function Register() {
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const router = useRouter();
 
   const email = username + '@hs-esslingen.de';
 
+  const validatePassword = (): boolean => {
+    if (password.length < 6) {
+      Alert.alert(
+        'Ungültiges Passwort',
+        'Das Passwort muss mindestens 6 Zeichen lang sein.'
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const handleRegister = () => {
+    if (!validatePassword()) {
+      return;
+    }
+
+    router.push({
+      pathname: '/(auth)/authentification' as any,
+      params: {
+        username: username,
+        email: email,
+        password: password,
+      },
+    });
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container}> 
       <LogoHeader />
 
       <ScrollView contentContainerStyle={styles.contentContainer}>
@@ -50,21 +78,9 @@ export default function Register() {
           </View>
 
           <View style={styles.buttonContainer}>
-            <Link
-              href={{
-                pathname: '/(auth)/authentification' as any,
-                params: {
-                  username: username,
-                  email: email,
-                  password: password,
-                },
-              }}
-              asChild
-            >
-              <TouchableOpacity style={styles.button}>
-                <Text style={styles.buttonText}>Registrieren</Text>
-              </TouchableOpacity>
-            </Link>
+            <TouchableOpacity style={styles.button} onPress={handleRegister}>
+              <Text style={styles.buttonText}>Registrieren</Text>
+            </TouchableOpacity>
 
             <Link href={'/(auth)/login-intern' as any} asChild>
               <TouchableOpacity>
