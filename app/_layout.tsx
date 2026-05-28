@@ -1,43 +1,53 @@
 import { useAuthContext } from "@/hooks/use-auth-context";
 import AuthProvider from "@/providers/auth-provider";
-import { Stack } from "expo-router";
-import { ActivityIndicator } from "react-native";
+import { useRouter, useSegments, Stack } from "expo-router";
+import { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
 
-// Mit dieser Funktion wird vor dem Öffnen der App gecheckt, ob der Nutzer eingeloggt ist oder nicht. Je nachdem wird er auf die entsprechenden Screens weitergeleitet.
 function RootNavigator() {
- const {isLoggedIn, isLoading, profile} = useAuthContext();
+  const { isLoggedIn, isLoading, isVerified, isAdmin } = useAuthContext();
+  const router = useRouter();
+  const segments = useSegments();
 
-console.log('RootNavigator:', { isLoggedIn, isLoading, profile })
+  useEffect(() => {
+    if (isLoading) return;
 
- //Warten auf App-Status
- if (isLoading) {
-    return <ActivityIndicator />;
-  }
+    const currentGroup = segments[0];
 
-  // Wenn eingeloggt -> Tabs
-  if (isLoggedIn) {
+    if (!isLoggedIn && currentGroup !== "(auth)") {
+      router.replace("/(auth)");
+    } else if (isLoggedIn && isAdmin && currentGroup !== "(admin)") {
+      router.replace("/(admin)/uebersicht");
+    } else if (isLoggedIn && !isAdmin && !isVerified && currentGroup !== "(verify)") {
+      router.replace("/(verify)/welcome");
+    } else if (isLoggedIn && !isAdmin && isVerified && currentGroup !== "(tabs)") {
+      router.replace("/(tabs)");
+    }
+  }, [isLoggedIn, isLoading, isVerified, isAdmin]);
+
+  if (isLoading) {
     return (
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{headerShown: false}} />
-      </Stack>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
     );
   }
 
-  // Wenn nicht eingeloggt -> Auth
   return (
-    <Stack>
-      <Stack.Screen name="(auth)" options={{headerShown: false}} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(verify)" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(admin)" />
     </Stack>
   );
 }
-
-
 
 export default function RootLayout() {
   return (
     <AuthProvider>
       <RootNavigator />
     </AuthProvider>
-
   );
 }

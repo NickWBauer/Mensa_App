@@ -1,11 +1,13 @@
 import LogoHeader from '@/components/logo-header';
+import { useAuthContext } from '@/hooks/use-auth-context';
+import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 import React from 'react';
 import { Image, ImageBackground, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function login() {
+    const { signIn } = useAuthContext();
     const [username, setUsername] = React.useState('');
     const [password, setPassword] = React.useState('');
     const [loading, setLoading] = React.useState(false);
@@ -15,14 +17,38 @@ export default function login() {
     async function signInWithEmail() {
         setLoading(true);
         setErrorMessage('');
-        const { error } = await supabase.auth.signInWithPassword({
-            email: username + "@hs-esslingen.de",
-            password: password
-        });
-        if (error) {
+
+        try {
+            const { data: student } = await supabase
+                .from('StudentenHochschule')
+                .select('RZ-Kennung')
+                .eq('RZ-Kennung', username)
+                .eq('Passwort', password)
+                .maybeSingle();
+
+            if (student) {
+                await signIn(username);
+                return;
+            }
+
+            const { data: admin } = await supabase
+                .from('AdminNutzer')
+                .select('RZ-Kennung')
+                .eq('RZ-Kennung', username)
+                .eq('Passwort', password)
+                .maybeSingle();
+
+            if (admin) {
+                await signIn(username);
+                return;
+            }
+
             setErrorMessage('Benutzername oder Passwort ist falsch.');
+        } catch (e) {
+            setErrorMessage('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }
 
     return (
