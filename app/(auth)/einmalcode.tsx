@@ -1,0 +1,266 @@
+import LogoHeader from '@/components/logo-header';
+import { useAuthContext } from '@/hooks/use-auth-context';
+import { supabase } from '@/lib/supabase';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React from 'react';
+import {
+    Alert,
+    Image,
+    ImageBackground,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+
+export default function Einmalcode() {
+  const router = useRouter();
+  const { signIn } = useAuthContext();
+
+  const params = useLocalSearchParams();
+
+  const username = String(params.username ?? '').trim().toLowerCase();
+  const email = String(params.email ?? '').trim().toLowerCase();
+  const password = String(params.password ?? '');
+
+  const [code, setCode] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+
+  async function sendCode() {
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    });
+
+    setLoading(false);
+
+    if (error) {
+      Alert.alert('Fehler', error.message);
+      return;
+    }
+
+    Alert.alert('Code gesendet', `Der Einmalcode wurde an ${email} gesendet.`);
+  }
+
+  async function verifyCode() {
+    setLoading(true);
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email',
+    });
+
+    if (error) {
+      setLoading(false);
+      Alert.alert('Fehler', error.message);
+      return;
+    }
+
+    const { error: passwordError } = await supabase.auth.updateUser({
+      password,
+    });
+
+    if (passwordError) {
+      setLoading(false);
+      Alert.alert('Fehler beim Passwort', passwordError.message);
+      return;
+    }
+
+    const { error: insertError } = await supabase.from('students').insert({
+      username,
+      email,
+      user_id: data.user?.id,
+      verification_method: 'einmalcode',
+    });
+
+    if (insertError) {
+      setLoading(false);
+      Alert.alert('Fehler beim Speichern', insertError.message);
+      return;
+    }
+
+    await signIn(username);
+
+    setLoading(false);
+    router.replace('/(tabs)/bestellungen' as any);
+  }
+
+  return (
+    <View style={styles.container}>
+      <LogoHeader />
+
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <View style={styles.titleBar}>
+          <Text style={styles.titleText}>Einmalcode</Text>
+        </View>
+
+        <ImageBackground
+          source={require('@/assets/images/campus-bg.jpg')}
+          style={styles.cardBackground}
+          imageStyle={styles.cardBackgroundImage}
+          resizeMode="cover"
+        >
+          <View style={styles.card}>
+            <Image
+              source={require('@/assets/images/Logo_Hs_Esslingen.jpg')}
+              style={styles.logo}
+            />
+
+            <Text style={styles.cardTitle}>
+              Der Einmalcode wird an folgende Hochschul-E-Mail gesendet:
+            </Text>
+
+            <Text style={styles.emailText}>{email}</Text>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={sendCode}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>
+                {loading ? 'Bitte warten...' : 'Einmalcode senden'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Einmalcode</Text>
+
+              <TextInput
+                value={code}
+                onChangeText={setCode}
+                placeholder="Code eingeben"
+                keyboardType="number-pad"
+                style={styles.input}
+                editable={!loading}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={verifyCode}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>Code bestätigen</Text>
+            </TouchableOpacity>
+          </View>
+        </ImageBackground>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#ffffff' },
+
+  contentContainer: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+
+  titleBar: {
+    width: '100%',
+    backgroundColor: '#DDEEFF',
+    borderWidth: 2.5,
+    borderColor: '#000000',
+    borderRadius: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+
+  titleText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111111',
+  },
+
+  cardBackground: {
+    alignSelf: 'stretch',
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
+
+  cardBackgroundImage: {},
+
+  card: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dddddd',
+    padding: 24,
+    alignItems: 'center',
+  },
+
+  logo: {
+    width: 180,
+    height: 70,
+    resizeMode: 'contain',
+    marginBottom: 12,
+  },
+
+  cardTitle: {
+    fontSize: 16,
+    color: '#333333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+
+  emailText: {
+    fontSize: 15,
+    color: '#18345d',
+    fontWeight: '700',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+
+  inputContainer: {
+    width: '100%',
+    marginTop: 18,
+    marginBottom: 14,
+  },
+
+  label: {
+    fontSize: 13,
+    color: '#444444',
+    marginBottom: 6,
+  },
+
+  input: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#cccccc',
+    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fafafa',
+    color: '#111111',
+    textAlign: 'center',
+  },
+
+  button: {
+    width: '100%',
+    backgroundColor: '#18345d',
+    borderRadius: 4,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+
+  buttonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+});

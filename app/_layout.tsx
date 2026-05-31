@@ -1,11 +1,12 @@
-import { useAuthContext } from "@/hooks/use-auth-context";
-import AuthProvider from "@/providers/auth-provider";
-import { useRouter, useSegments, Stack } from "expo-router";
-import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { useAuthContext } from '@/hooks/use-auth-context';
+import AuthProvider from '@/providers/auth-provider';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
 function RootNavigator() {
-  const { isLoggedIn, isLoading, isVerified, isAdmin } = useAuthContext();
+  const { isLoggedIn, isLoading, isAdmin } = useAuthContext();
+
   const router = useRouter();
   const segments = useSegments();
 
@@ -14,20 +15,37 @@ function RootNavigator() {
 
     const currentGroup = segments[0];
 
-    if (!isLoggedIn && currentGroup !== "(auth)") {
-      router.replace("/(auth)");
-    } else if (isLoggedIn && isAdmin && currentGroup !== "(admin)") {
-      router.replace("/(admin)/uebersicht");
-    } else if (isLoggedIn && !isAdmin && !isVerified && currentGroup !== "(verify)") {
-      router.replace("/(verify)/welcome");
-    } else if (isLoggedIn && !isAdmin && isVerified && currentGroup !== "(tabs)") {
-      router.replace("/(tabs)");
+    // Nicht eingeloggt
+    if (!isLoggedIn) {
+      if (currentGroup !== '(auth)') {
+        router.replace('/(auth)/welcome');
+      }
+      return;
     }
-  }, [isLoggedIn, isLoading, isVerified, isAdmin]);
+
+    // Admin
+    if (isAdmin) {
+      if (currentGroup !== '(admin)') {
+        router.replace('/(admin)/uebersicht');
+      }
+      return;
+    }
+
+    // Normaler Benutzer
+    if (currentGroup !== '(tabs)') {
+      router.replace('/(tabs)/bestellungen');
+    }
+  }, [isLoggedIn, isLoading, isAdmin, segments]);
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
         <ActivityIndicator size="large" />
       </View>
     );
@@ -37,7 +55,6 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(verify)" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(admin)" />
     </Stack>
