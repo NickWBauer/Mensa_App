@@ -51,7 +51,7 @@ export default function Speiseplan() {
 
   return (
     <View style={styles.container}>
-      <LogoHeader />
+      <LogoHeader showDateTime />
 
       {loading && (
         <View style={styles.center}>

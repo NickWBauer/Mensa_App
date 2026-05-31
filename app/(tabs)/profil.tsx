@@ -20,7 +20,7 @@ export default function Profil() {
 
   return (
     <View style={styles.container}>
-      <LogoHeader />
+      <LogoHeader showDateTime />
       <ScrollView contentContainerStyle={styles.content}>
 
         <View style={styles.card}>

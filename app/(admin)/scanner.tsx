@@ -23,6 +23,8 @@ type BestellungRow = {
   bestell_datum: string;
   kategorie: string;
   preis: string;
+  auth_user_id?: string | null;
+  status?: 'bestellt' | 'abgeholt' | 'verfallen' | 'storniert';
 };
 
 type BestellungGruppe = {
@@ -39,12 +41,67 @@ type ScanErgebnis = {
   rzKennung: string;
   gruppen: BestellungGruppe[];
   alleIds: number[];
+  rows: BestellungRow[];
 };
 
 // ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 function todayIso() { return new Date().toISOString().split('T')[0]; }
+
+function isBeforePickupDeadline() {
+  const now = new Date();
+  const deadline = new Date();
+  deadline.setHours(14, 0, 0, 0);
+  deadline.setMinutes(0);
+  deadline.setSeconds(0);
+  deadline.setMilliseconds(0);
+  return now < deadline;
+}
+
+function parsePreis(preis: string) {
+  return parseFloat(preis.replace('€', '').replace(',', '.').trim()) || 0;
+}
+
+async function updateOrderStatus(ids: number[], status: 'abgeholt' | 'verfallen' | 'storniert' | 'bestellt') {
+  if (ids.length === 0) return { error: null };
+  return supabase.from('Bestellungen').update({ status }).in('id', ids);
+}
+
+async function createOffeneSchuld(userId: string | null | undefined, amount: number) {
+  if (amount <= 0) return { error: null };
+  const schuld = {
+    user_id: userId || undefined,
+    betrag: Number(amount.toFixed(2)),
+    faellig_seit: todayIso(),
+    bezahlt: false,
+  };
+  return supabase.from('offene_schulden').insert(schuld);
+}
+
+async function handleDeadlineExpiredForOrders(rows: BestellungRow[]) {
+  if (rows.length === 0) return;
+  const ids = rows.map(r => r.id);
+  const amount = rows.reduce((sum, row) => sum + parsePreis(row.preis), 0);
+  const userId = rows[0]?.auth_user_id ?? rows[0]?.email ?? null;
+
+  const { error: updateError } = await updateOrderStatus(ids, 'verfallen');
+  if (updateError) {
+    Alert.alert('Fehler', `Abholfrist konnte nicht verarbeitet werden: ${updateError.message}`);
+    return;
+  }
+
+  const { error: debtError } = await createOffeneSchuld(userId, amount);
+  if (debtError) {
+    Alert.alert('Fehler', `Schulden konnten nicht gespeichert werden: ${debtError.message}`);
+    return;
+  }
+
+  Alert.alert(
+    'Abholfrist abgelaufen',
+    `Die Bestellung ist nicht mehr abholbar. Offen: ${amount.toFixed(2).replace('.', ',')} €`
+  );
+}
 
 function gruppiereBestellungen(rows: BestellungRow[]): BestellungGruppe[] {
   const map: Record<string, BestellungGruppe> = {};
@@ -100,15 +157,23 @@ export default function Scanner() {
           .maybeSingle(),
         supabase
           .from('Bestellungen')
-          .select('id, email, gericht_name, bestell_datum, kategorie, preis')
+          .select('id, email, gericht_name, bestell_datum, kategorie, preis, auth_user_id, status')
           .eq('bestell_datum', today)
+          .eq('status', 'bestellt')
           .order('gericht_name'),
       ]);
 
-      const email = studentFull?.['E-Mail'];
+      const email = (studentFull as { 'E-Mail'?: string } | null)?.['E-Mail'];
       const meineBestellungen = email
         ? (bestellungen ?? []).filter(b => b.email === email) as BestellungRow[]
         : [];
+
+      if (!isBeforePickupDeadline() && meineBestellungen.length > 0) {
+        await handleDeadlineExpiredForOrders(meineBestellungen);
+        setTimeout(() => { cooldownRef.current = false; }, 1000);
+        setLadung(false);
+        return;
+      }
 
       const gruppen = gruppiereBestellungen(meineBestellungen);
       const alleIds = meineBestellungen.map(b => b.id);
@@ -131,7 +196,7 @@ export default function Scanner() {
       }
       setAngepasst(init);
 
-      setErgebnis({ rzKennung, gruppen, alleIds });
+      setErgebnis({ rzKennung, gruppen, alleIds, rows: meineBestellungen });
     } finally {
       setLadung(false);
     }
@@ -142,10 +207,15 @@ export default function Scanner() {
     setZeigeBestaetigung(false);
     setLadung(true);
 
-    const { error } = await supabase
-      .from('Bestellungen')
-      .delete()
-      .in('id', ergebnis.alleIds);
+    if (!isBeforePickupDeadline()) {
+      await handleDeadlineExpiredForOrders(ergebnis.rows);
+      setErgebnis(null);
+      setLadung(false);
+      setTimeout(() => { cooldownRef.current = false; }, 1000);
+      return;
+    }
+
+    const { error } = await updateOrderStatus(ergebnis.alleIds, 'abgeholt');
 
     if (error) {
       Alert.alert('Fehler', `Abholung konnte nicht gespeichert werden: ${error.message}`);
@@ -160,37 +230,41 @@ export default function Scanner() {
 
   const handleAnpassungSpeichern = async () => {
     if (!ergebnis) return;
+    if (!isBeforePickupDeadline()) {
+      await handleDeadlineExpiredForOrders(ergebnis.rows as BestellungRow[]);
+      setErgebnis(null);
+      setLadung(false);
+      setTimeout(() => { cooldownRef.current = false; }, 1000);
+      return;
+    }
+
     setZeigeAnpassen(false);
     setLadung(true);
 
-    const zuLoeschen: number[] = [];
+    const abgeholtIds: number[] = [];
 
     for (const g of ergebnis.gruppen) {
       const key = `${g.gericht_name}|${g.bestell_datum}`;
       const a = angepasst[key];
 
-      // Wert = Verbleibende → Zu löschen = Gesamt − Verbleibende
       const verblStud = Math.max(0, Math.min(parseInt(a?.studierende ?? '0', 10) || 0, g.idsByKat.studierende.length));
       const verblBed  = Math.max(0, Math.min(parseInt(a?.bedienstete ?? '0', 10) || 0, g.idsByKat.bedienstete.length));
       const verblGaes = Math.max(0, Math.min(parseInt(a?.gaeste      ?? '0', 10) || 0, g.idsByKat.gaeste.length));
 
-      zuLoeschen.push(
+      abgeholtIds.push(
         ...g.idsByKat.studierende.slice(0, g.idsByKat.studierende.length - verblStud),
         ...g.idsByKat.bedienstete.slice(0, g.idsByKat.bedienstete.length - verblBed),
         ...g.idsByKat.gaeste.slice(0, g.idsByKat.gaeste.length - verblGaes),
       );
     }
 
-    if (zuLoeschen.length === 0) {
-      Alert.alert('Hinweis', 'Keine Bestellungen zum Löschen ausgewählt.');
+    if (abgeholtIds.length === 0) {
+      Alert.alert('Hinweis', 'Keine Bestellungen zum Abholen ausgewählt.');
       setLadung(false);
       return;
     }
 
-    const { error } = await supabase
-      .from('Bestellungen')
-      .delete()
-      .in('id', zuLoeschen);
+    const { error } = await updateOrderStatus(abgeholtIds, 'abgeholt');
 
     if (error) {
       Alert.alert('Fehler', `Abholung konnte nicht gespeichert werden: ${error.message}`);
@@ -565,5 +639,8 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#1a4d1a',
     justifyContent: 'center', alignItems: 'center',
+  },
+  btnDisabled: {
+    opacity: 0.4,
   },
 });

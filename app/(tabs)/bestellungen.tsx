@@ -1,19 +1,20 @@
-import { Ionicons } from '@expo/vector-icons';
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
+import { useOpenDebtSum } from '@/hooks/use-open-orders-count';
 import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 // ─── Hilfsfunktionen ────────────────────────────────────────────────────────
@@ -84,7 +85,8 @@ type BestellungRow = {
   kategorie: string;
   preis: string;
   image_url: string;
-  auth_user_id: string;
+  auth_user_id?: string | null;
+  status?: 'bestellt' | 'abgeholt' | 'verfallen' | 'storniert';
 };
 
 type BestellungGruppe = {
@@ -109,7 +111,7 @@ export default function Bestellungen() {
 
   return (
     <View style={styles.container}>
-      <LogoHeader />
+      <LogoHeader showDateTime />
 
       <NavItem label="Vorbestellung" active={activeTab === 'vorbestellung'} onPress={() => setActiveTab('vorbestellung')} />
       <NavItem label="Meine Bestellungen" active={activeTab === 'meine'} onPress={() => setActiveTab('meine')} />
@@ -213,13 +215,13 @@ function VorbestellungContent() {
       for (const meal of cartItems) {
         const w = mengen[meal.id] ?? { studierende: 0, bedienstete: 0, gaeste: 0 };
         for (let i = 0; i < w.studierende; i++) {
-          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Studierende', preis: meal.PreisStudierende, image_url: meal.image_url, auth_user_id: authUserId as any });
+          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Studierende', preis: meal.PreisStudierende, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
         }
         for (let i = 0; i < w.bedienstete; i++) {
-          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Bedienstete', preis: meal.PreisBedienstet, image_url: meal.image_url, auth_user_id: authUserId as any });
+          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Bedienstete', preis: meal.PreisBedienstet, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
         }
         for (let i = 0; i < w.gaeste; i++) {
-          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Gäste', preis: meal.PreisGast, image_url: meal.image_url, auth_user_id: authUserId as any });
+          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Gäste', preis: meal.PreisGast, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
         }
       }
 
@@ -680,9 +682,15 @@ function BestellungKarte({
 // ─── Guthaben ─────────────────────────────────────────────────────────────────
 
 function GuthabenContent() {
+  const openDebtSum = useOpenDebtSum();
+
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
       <Text style={styles.sectionTitle}>Guthaben</Text>
+      <View style={styles.debtCard}>
+        <Text style={styles.debtLabel}>Offene Schulden:</Text>
+        <Text style={styles.debtValue}>{openDebtSum.toFixed(2).replace('.', ',')} €</Text>
+      </View>
       <Text style={styles.balanceLabel}>Guthaben aufladen:</Text>
       <Text
         style={styles.link}
@@ -847,6 +855,25 @@ const styles = StyleSheet.create({
 
   balanceLabel: { fontSize: 16, fontWeight: '700', color: '#222', marginTop: 6 },
   link: { fontSize: 14, color: '#0066cc', textDecorationLine: 'underline', marginTop: 4 },
+  debtCard: {
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#dd9999',
+    backgroundColor: '#fff4f4',
+    padding: 12,
+    marginBottom: 12,
+  },
+  debtLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#a00000',
+    marginBottom: 6,
+  },
+  debtValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#660000',
+  },
 
   overlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',

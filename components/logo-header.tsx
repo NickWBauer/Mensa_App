@@ -1,5 +1,15 @@
-import React from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
+
+const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+
+function pad(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+type LogoHeaderProps = {
+  showDateTime?: boolean;
+};
 
 const styles = StyleSheet.create({
   headerContainer: {
@@ -26,9 +36,49 @@ const styles = StyleSheet.create({
     height: 90,
     resizeMode: 'contain',
   },
+  infoRow: {
+    marginTop: 10,
+    paddingTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  dateBlock: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#333333',
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  openOrdersText: {
+    fontSize: 14,
+    color: '#333333',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
 });
 
-export default function LogoHeader() {
+export default function LogoHeader({ showDateTime }: LogoHeaderProps) {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    if (!showDateTime) return;
+
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [showDateTime]);
+
+  const dateLabel = `${WEEKDAYS[now.getDay()]}, ${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}`;
+  const timeLabel = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
   return (
     <View style={styles.headerContainer}>
       <View style={styles.logoContainer}>
@@ -41,6 +91,14 @@ export default function LogoHeader() {
           style={styles.logo2}
         />
       </View>
+      {showDateTime ? (
+        <View style={styles.infoRow}>
+          <View style={styles.dateBlock}>
+            <Text style={styles.infoText}>{dateLabel}</Text>
+            <Text style={styles.infoText}>{timeLabel}</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }

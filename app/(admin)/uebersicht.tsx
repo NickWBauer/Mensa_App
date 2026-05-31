@@ -1,18 +1,18 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
-import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 // ─── Typen ───────────────────────────────────────────────────────────────────
