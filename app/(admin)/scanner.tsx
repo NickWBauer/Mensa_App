@@ -14,7 +14,9 @@ import {
   View,
 } from 'react-native';
 
-// ─── Typen ───────────────────────────────────────────────────────────────────
+type StudentRow = {
+  'E-Mail': string;
+};
 
 type BestellungRow = {
   id: number;
@@ -34,7 +36,11 @@ type BestellungGruppe = {
   bedienstete: number;
   gaeste: number;
   ids: number[];
-  idsByKat: { studierende: number[]; bedienstete: number[]; gaeste: number[] };
+  idsByKat: {
+    studierende: number[];
+    bedienstete: number[];
+    gaeste: number[];
+  };
 };
 
 type ScanErgebnis = {
@@ -105,26 +111,42 @@ async function handleDeadlineExpiredForOrders(rows: BestellungRow[]) {
 
 function gruppiereBestellungen(rows: BestellungRow[]): BestellungGruppe[] {
   const map: Record<string, BestellungGruppe> = {};
+
   for (const r of rows) {
     const key = `${r.gericht_name}|${r.bestell_datum}`;
+
     if (!map[key]) {
       map[key] = {
         gericht_name: r.gericht_name,
         bestell_datum: r.bestell_datum,
-        studierende: 0, bedienstete: 0, gaeste: 0,
+        studierende: 0,
+        bedienstete: 0,
+        gaeste: 0,
         ids: [],
-        idsByKat: { studierende: [], bedienstete: [], gaeste: [] },
+        idsByKat: {
+          studierende: [],
+          bedienstete: [],
+          gaeste: [],
+        },
       };
     }
+
     map[key].ids.push(r.id);
-    if (r.kategorie === 'Studierende') { map[key].studierende++; map[key].idsByKat.studierende.push(r.id); }
-    else if (r.kategorie === 'Bedienstete') { map[key].bedienstete++; map[key].idsByKat.bedienstete.push(r.id); }
-    else if (r.kategorie === 'Gäste')       { map[key].gaeste++;       map[key].idsByKat.gaeste.push(r.id); }
+
+    if (r.kategorie === 'Studierende') {
+      map[key].studierende++;
+      map[key].idsByKat.studierende.push(r.id);
+    } else if (r.kategorie === 'Bedienstete') {
+      map[key].bedienstete++;
+      map[key].idsByKat.bedienstete.push(r.id);
+    } else if (r.kategorie === 'Gäste') {
+      map[key].gaeste++;
+      map[key].idsByKat.gaeste.push(r.id);
+    }
   }
+
   return Object.values(map);
 }
-
-// ─── Hauptkomponente ─────────────────────────────────────────────────────────
 
 export default function Scanner() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -135,13 +157,15 @@ export default function Scanner() {
   const [zeigeBestaetigung, setZeigeBestaetigung] = useState(false);
   const [zeigeAnpassen, setZeigeAnpassen] = useState(false);
 
-  // Anpassen-Modus: angepasste Mengen pro Gruppe
-  const [angepasst, setAngepasst] = useState<Record<string, { studierende: string; bedienstete: string; gaeste: string }>>({});
+  const [angepasst, setAngepasst] = useState<
+    Record<string, { studierende: string; bedienstete: string; gaeste: string }>
+  >({});
 
   const cooldownRef = useRef(false);
 
   const handleScan = async (rzKennung: string) => {
     if (cooldownRef.current || ladung) return;
+
     cooldownRef.current = true;
     setScanning(false);
     setLadung(true);
@@ -155,6 +179,7 @@ export default function Scanner() {
           .select('E-Mail')
           .eq('RZ-Kennung', rzKennung)
           .maybeSingle(),
+
         supabase
           .from('Bestellungen')
           .select('id, email, gericht_name, bestell_datum, kategorie, preis, auth_user_id, status')
@@ -176,24 +201,34 @@ export default function Scanner() {
       }
 
       const gruppen = gruppiereBestellungen(meineBestellungen);
-      const alleIds = meineBestellungen.map(b => b.id);
+      const alleIds = meineBestellungen.map((b) => b.id);
 
       if (gruppen.length === 0) {
-        Alert.alert('Keine offenen Bestellungen', 'Für diesen Nutzer liegt heute keine offene Vorbestellung vor.');
-        setTimeout(() => { cooldownRef.current = false; }, 2000);
+        Alert.alert(
+          'Keine offenen Bestellungen',
+          'Für diesen Nutzer liegt heute keine offene Vorbestellung vor.'
+        );
+
+        setTimeout(() => {
+          cooldownRef.current = false;
+        }, 2000);
+
         setLadung(false);
         return;
       }
 
       const init: typeof angepasst = {};
+
       for (const g of gruppen) {
         const key = `${g.gericht_name}|${g.bestell_datum}`;
+
         init[key] = {
           studierende: String(g.studierende),
           bedienstete: String(g.bedienstete),
           gaeste: String(g.gaeste),
         };
       }
+
       setAngepasst(init);
 
       setErgebnis({ rzKennung, gruppen, alleIds, rows: meineBestellungen });
@@ -204,6 +239,7 @@ export default function Scanner() {
 
   const handleAlleAbgeholt = async () => {
     if (!ergebnis) return;
+
     setZeigeBestaetigung(false);
     setLadung(true);
 
@@ -218,14 +254,21 @@ export default function Scanner() {
     const { error } = await updateOrderStatus(ergebnis.alleIds, 'abgeholt');
 
     if (error) {
-      Alert.alert('Fehler', `Abholung konnte nicht gespeichert werden: ${error.message}`);
+      Alert.alert(
+        'Fehler',
+        `Abholung konnte nicht gespeichert werden: ${error.message}`
+      );
+
       setLadung(false);
       return;
     }
 
     setErgebnis(null);
     setLadung(false);
-    setTimeout(() => { cooldownRef.current = false; }, 1000);
+
+    setTimeout(() => {
+      cooldownRef.current = false;
+    }, 1000);
   };
 
   const handleAnpassungSpeichern = async () => {
@@ -267,17 +310,22 @@ export default function Scanner() {
     const { error } = await updateOrderStatus(abgeholtIds, 'abgeholt');
 
     if (error) {
-      Alert.alert('Fehler', `Abholung konnte nicht gespeichert werden: ${error.message}`);
+      Alert.alert(
+        'Fehler',
+        `Abholung konnte nicht gespeichert werden: ${error.message}`
+      );
+
       setLadung(false);
       return;
     }
 
     setErgebnis(null);
     setLadung(false);
-    setTimeout(() => { cooldownRef.current = false; }, 1000);
-  };
 
-  // ─── Kein Ergebnis → Scanner-Ansicht ─────────────────────────────────────
+    setTimeout(() => {
+      cooldownRef.current = false;
+    }, 1000);
+  };
 
   if (!ergebnis) {
     if (!permission) {
@@ -293,8 +341,12 @@ export default function Scanner() {
       return (
         <View style={styles.container}>
           <LogoHeader />
+
           <View style={styles.center}>
-            <Text style={styles.permText}>Kamera-Zugriff wird für den QR-Scanner benötigt.</Text>
+            <Text style={styles.permText}>
+              Kamera-Zugriff wird für den QR-Scanner benötigt.
+            </Text>
+
             <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
               <Text style={styles.permBtnText}>Zugriff erlauben</Text>
             </TouchableOpacity>
@@ -306,6 +358,7 @@ export default function Scanner() {
     return (
       <View style={styles.container}>
         <LogoHeader />
+
         <View style={styles.scannerContainer}>
           {ladung ? (
             <View style={styles.center}>
@@ -320,14 +373,22 @@ export default function Scanner() {
                 barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                 onBarcodeScanned={({ data }) => handleScan(data)}
               />
-              <TouchableOpacity style={styles.abbrechenBtn} onPress={() => setScanning(false)}>
+
+              <TouchableOpacity
+                style={styles.abbrechenBtn}
+                onPress={() => setScanning(false)}
+              >
                 <Text style={styles.abbrechenText}>Abbrechen</Text>
               </TouchableOpacity>
             </>
           ) : (
             <View style={styles.center}>
               <Text style={styles.hinweisText}>QR-Code des Nutzers scannen</Text>
-              <TouchableOpacity style={styles.scanBtn} onPress={() => setScanning(true)}>
+
+              <TouchableOpacity
+                style={styles.scanBtn}
+                onPress={() => setScanning(true)}
+              >
                 <Text style={styles.scanBtnText}>Kamera öffnen</Text>
               </TouchableOpacity>
             </View>
@@ -337,29 +398,44 @@ export default function Scanner() {
     );
   }
 
-  // ─── Ergebnis-Popup ───────────────────────────────────────────────────────
-
-  const gesamtAnzahl = ergebnis.gruppen.reduce((s, g) => s + g.studierende + g.bedienstete + g.gaeste, 0);
+  const gesamtAnzahl = ergebnis.gruppen.reduce(
+    (summe, g) => summe + g.studierende + g.bedienstete + g.gaeste,
+    0
+  );
 
   return (
     <View style={styles.container}>
       <LogoHeader />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
 
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.nutzerCard}>
           <Ionicons name="checkmark-circle" size={20} color="#1a7a2a" />
           <Text style={styles.nutzerKennung}>Bestellung gefunden</Text>
         </View>
 
-        {ergebnis.gruppen.map(g => {
+        {ergebnis.gruppen.map((g) => {
           const key = `${g.gericht_name}|${g.bestell_datum}`;
+
           return (
             <View key={key} style={styles.bestellCard}>
               <Text style={styles.bestellDatum}>{g.bestell_datum}</Text>
               <Text style={styles.bestellGericht}>{g.gericht_name}</Text>
-              {g.studierende > 0 && <Text style={styles.bestellZeile}>{g.studierende}× Studierende</Text>}
-              {g.bedienstete > 0 && <Text style={styles.bestellZeile}>{g.bedienstete}× Bedienstete</Text>}
-              {g.gaeste > 0 && <Text style={styles.bestellZeile}>{g.gaeste}× Gäste</Text>}
+
+              {g.studierende > 0 && (
+                <Text style={styles.bestellZeile}>
+                  {g.studierende}× Studierende
+                </Text>
+              )}
+
+              {g.bedienstete > 0 && (
+                <Text style={styles.bestellZeile}>
+                  {g.bedienstete}× Bedienstete
+                </Text>
+              )}
+
+              {g.gaeste > 0 && (
+                <Text style={styles.bestellZeile}>{g.gaeste}× Gäste</Text>
+              )}
             </View>
           );
         })}
@@ -395,16 +471,20 @@ export default function Scanner() {
         </View>
       </ScrollView>
 
-      {/* Bestätigungs-Dialog */}
       <Modal transparent visible={zeigeBestaetigung} animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.dialog}>
             <Text style={styles.dialogTitel}>Abholung bestätigen</Text>
-            {ergebnis.gruppen.map(g => (
-              <Text key={`${g.gericht_name}|${g.bestell_datum}`} style={styles.dialogZeile}>
+
+            {ergebnis.gruppen.map((g) => (
+              <Text
+                key={`${g.gericht_name}|${g.bestell_datum}`}
+                style={styles.dialogZeile}
+              >
                 {g.gericht_name}: {g.studierende + g.bedienstete + g.gaeste}×
               </Text>
             ))}
+
             <View style={styles.dialogButtons}>
               <TouchableOpacity
                 style={styles.dialogAbbrechenBtn}
@@ -412,7 +492,11 @@ export default function Scanner() {
               >
                 <Text style={styles.dialogAbbrechenText}>Zurück</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.dialogBestaetigenBtn} onPress={handleAlleAbgeholt}>
+
+              <TouchableOpacity
+                style={styles.dialogBestaetigenBtn}
+                onPress={handleAlleAbgeholt}
+              >
                 <Text style={styles.dialogBestaetigenText}>Bestätigen</Text>
               </TouchableOpacity>
             </View>
@@ -420,43 +504,77 @@ export default function Scanner() {
         </View>
       </Modal>
 
-      {/* Anpassen-Dialog */}
       <Modal transparent visible={zeigeAnpassen} animationType="slide">
         <View style={styles.overlay}>
           <View style={[styles.dialog, { maxHeight: '80%' }]}>
             <Text style={styles.dialogTitel}>Abholung anpassen</Text>
+
             <ScrollView>
-              {ergebnis.gruppen.map(g => {
+              {ergebnis.gruppen.map((g) => {
                 const key = `${g.gericht_name}|${g.bestell_datum}`;
-                const a = angepasst[key] ?? { studierende: '0', bedienstete: '0', gaeste: '0' };
+
+                const a = angepasst[key] ?? {
+                  studierende: '0',
+                  bedienstete: '0',
+                  gaeste: '0',
+                };
+
                 return (
                   <View key={key} style={styles.anpassenBlock}>
                     <Text style={styles.anpassenGericht}>{g.gericht_name}</Text>
+
                     {g.studierende > 0 && (
                       <AnpassenZeile
                         label={`Studierende — verbleibend (von ${g.studierende})`}
                         wert={a.studierende}
-                        onChange={v => setAngepasst(prev => ({ ...prev, [key]: { ...prev[key], studierende: v } }))}
+                        onChange={(v) =>
+                          setAngepasst((prev) => ({
+                            ...prev,
+                            [key]: {
+                              ...(prev[key] ?? a),
+                              studierende: v,
+                            },
+                          }))
+                        }
                       />
                     )}
+
                     {g.bedienstete > 0 && (
                       <AnpassenZeile
                         label={`Bedienstete — verbleibend (von ${g.bedienstete})`}
                         wert={a.bedienstete}
-                        onChange={v => setAngepasst(prev => ({ ...prev, [key]: { ...prev[key], bedienstete: v } }))}
+                        onChange={(v) =>
+                          setAngepasst((prev) => ({
+                            ...prev,
+                            [key]: {
+                              ...(prev[key] ?? a),
+                              bedienstete: v,
+                            },
+                          }))
+                        }
                       />
                     )}
+
                     {g.gaeste > 0 && (
                       <AnpassenZeile
                         label={`Gäste — verbleibend (von ${g.gaeste})`}
                         wert={a.gaeste}
-                        onChange={v => setAngepasst(prev => ({ ...prev, [key]: { ...prev[key], gaeste: v } }))}
+                        onChange={(v) =>
+                          setAngepasst((prev) => ({
+                            ...prev,
+                            [key]: {
+                              ...(prev[key] ?? a),
+                              gaeste: v,
+                            },
+                          }))
+                        }
                       />
                     )}
                   </View>
                 );
               })}
             </ScrollView>
+
             <View style={styles.dialogButtons}>
               <TouchableOpacity
                 style={styles.dialogAbbrechenBtn}
@@ -464,6 +582,7 @@ export default function Scanner() {
               >
                 <Text style={styles.dialogAbbrechenText}>Zurück</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.dialogBestaetigenBtn}
                 onPress={handleAnpassungSpeichern}
@@ -478,15 +597,29 @@ export default function Scanner() {
   );
 }
 
-function AnpassenZeile({ label, wert, onChange }: { label: string; wert: string; onChange: (v: string) => void }) {
+function AnpassenZeile({
+  label,
+  wert,
+  onChange,
+}: {
+  label: string;
+  wert: string;
+  onChange: (v: string) => void;
+}) {
   const num = parseInt(wert, 10) || 0;
+
   return (
     <View style={styles.anpassenZeile}>
       <Text style={styles.anpassenLabel}>{label}</Text>
+
       <View style={styles.anpassenKontrolle}>
         <Text style={styles.anpassenZahl}>{num}</Text>
+
         <TouchableOpacity
-          style={[styles.anpassenMinusBtn, num <= 0 && styles.btnDisabled]}
+          style={[
+            styles.anpassenMinusBtn,
+            num <= 0 && styles.btnDisabled,
+          ]}
           onPress={() => onChange(String(Math.max(0, num - 1)))}
           disabled={num <= 0}
         >
@@ -497,27 +630,52 @@ function AnpassenZeile({ label, wert, onChange }: { label: string; wert: string;
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
   scrollContent: { padding: 14, paddingBottom: 120 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 24 },
+
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    padding: 24,
+  },
 
   scannerContainer: { flex: 1 },
   camera: { flex: 1 },
 
-  hinweisText: { fontSize: 16, color: '#333', textAlign: 'center' },
-  ladeText: { fontSize: 14, color: '#1a4d1a', marginTop: 12 },
+  hinweisText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
 
-  permText: { fontSize: 15, color: '#333', textAlign: 'center', lineHeight: 22 },
+  ladeText: {
+    fontSize: 14,
+    color: '#1a4d1a',
+    marginTop: 12,
+  },
+
+  permText: {
+    fontSize: 15,
+    color: '#333',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+
   permBtn: {
     backgroundColor: '#1a4d1a',
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 24,
   },
-  permBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  permBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   scanBtn: {
     backgroundColor: '#1a4d1a',
@@ -525,7 +683,12 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 40,
   },
-  scanBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  scanBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
 
   abbrechenBtn: {
     position: 'absolute',
@@ -536,7 +699,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 28,
   },
-  abbrechenText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+
+  abbrechenText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 
   nutzerCard: {
     backgroundColor: '#e8f5e8',
@@ -546,8 +714,12 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
-  nutzerName: { fontSize: 18, fontWeight: '700', color: '#1a4d1a' },
-  nutzerKennung: { fontSize: 13, color: '#5a8a5a', marginTop: 2 },
+
+  nutzerKennung: {
+    fontSize: 13,
+    color: '#5a8a5a',
+    marginTop: 2,
+  },
 
   bestellCard: {
     borderRadius: 8,
@@ -557,11 +729,29 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: '#f6fbf6',
   },
-  bestellDatum: { fontSize: 12, color: '#5a8a5a', marginBottom: 2 },
-  bestellGericht: { fontSize: 14, fontWeight: '700', color: '#222', marginBottom: 6 },
-  bestellZeile: { fontSize: 13, color: '#444' },
 
-  aktionenBlock: { gap: 10, marginTop: 8 },
+  bestellDatum: {
+    fontSize: 12,
+    color: '#5a8a5a',
+    marginBottom: 2,
+  },
+
+  bestellGericht: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 6,
+  },
+
+  bestellZeile: {
+    fontSize: 13,
+    color: '#444',
+  },
+
+  aktionenBlock: {
+    gap: 10,
+    marginTop: 8,
+  },
 
   abgeholtBtn: {
     backgroundColor: '#1a7a2a',
@@ -569,7 +759,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
-  abgeholtBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  abgeholtBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
 
   anpassenBtn: {
     borderWidth: 2,
@@ -578,7 +773,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  anpassenBtnText: { color: '#1a4d1a', fontSize: 15, fontWeight: '700' },
+
+  anpassenBtnText: {
+    color: '#1a4d1a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   abbrechenKarteBtn: {
     borderWidth: 1,
@@ -587,7 +787,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  abbrechenKarteBtnText: { color: '#666', fontSize: 14 },
+
+  abbrechenKarteBtnText: {
+    color: '#666',
+    fontSize: 14,
+  },
 
   overlay: {
     flex: 1,
@@ -595,6 +799,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   dialog: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -607,10 +812,26 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 10,
   },
-  dialogTitel: { fontSize: 16, fontWeight: '700', color: '#1a4d1a', marginBottom: 10 },
-  dialogText: { fontSize: 15, fontWeight: '600', color: '#222', marginBottom: 6 },
-  dialogZeile: { fontSize: 13, color: '#555', marginBottom: 2 },
-  dialogButtons: { flexDirection: 'row', gap: 10, marginTop: 20 },
+
+  dialogTitel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a4d1a',
+    marginBottom: 10,
+  },
+
+  dialogZeile: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 2,
+  },
+
+  dialogButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 20,
+  },
+
   dialogAbbrechenBtn: {
     flex: 1,
     borderWidth: 1.5,
@@ -619,7 +840,12 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     alignItems: 'center',
   },
-  dialogAbbrechenText: { fontSize: 14, color: '#555' },
+
+  dialogAbbrechenText: {
+    fontSize: 14,
+    color: '#555',
+  },
+
   dialogBestaetigenBtn: {
     flex: 1,
     backgroundColor: '#1a7a2a',
@@ -627,16 +853,55 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     alignItems: 'center',
   },
-  dialogBestaetigenText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
-  anpassenBlock: { marginBottom: 16 },
-  anpassenGericht: { fontSize: 14, fontWeight: '700', color: '#222', marginBottom: 8 },
-  anpassenZeile: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
-  anpassenLabel: { flex: 1, fontSize: 13, color: '#444' },
-  anpassenKontrolle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  anpassenZahl: { fontSize: 20, fontWeight: '700', color: '#1a4d1a', minWidth: 24, textAlign: 'center' },
+  dialogBestaetigenText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  anpassenBlock: {
+    marginBottom: 16,
+  },
+
+  anpassenGericht: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 8,
+  },
+
+  anpassenZeile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 10,
+  },
+
+  anpassenLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: '#444',
+  },
+
+  anpassenKontrolle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  anpassenZahl: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a4d1a',
+    minWidth: 24,
+    textAlign: 'center',
+  },
+
   anpassenMinusBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#1a4d1a',
     justifyContent: 'center', alignItems: 'center',
   },
