@@ -4,15 +4,15 @@ import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-    Alert,
-    Image,
-    ImageBackground,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ImageBackground,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function Einmalcode() {
@@ -33,7 +33,9 @@ export default function Einmalcode() {
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+      },
     });
 
     setLoading(false);
@@ -84,10 +86,17 @@ export default function Einmalcode() {
       return;
     }
 
-    await signIn(username);
+   // await signIn(username);
 
     setLoading(false);
-    router.replace('/(tabs)/bestellungen' as any);
+
+    router.replace({
+      pathname: '/(auth)/studentenausweis-foto',
+      params: {
+        username,
+        email,
+      },
+    } as any);
   }
 
   return (

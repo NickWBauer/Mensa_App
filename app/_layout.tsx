@@ -15,15 +15,13 @@ function RootNavigator() {
 
     const currentGroup = segments[0];
 
-    // Nicht eingeloggt
     if (!isLoggedIn) {
       if (currentGroup !== '(auth)') {
-        router.replace('/(auth)/welcome');
+        router.replace('/(auth)');
       }
       return;
     }
 
-    // Admin
     if (isAdmin) {
       if (currentGroup !== '(admin)') {
         router.replace('/(admin)/uebersicht');
@@ -31,9 +29,8 @@ function RootNavigator() {
       return;
     }
 
-    // Normaler Benutzer
     if (currentGroup !== '(tabs)') {
-      router.replace('/(tabs)/bestellungen');
+      router.replace('/(tabs)');
     }
   }, [isLoggedIn, isLoading, isAdmin, segments]);
 
