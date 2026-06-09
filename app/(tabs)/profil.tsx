@@ -21,7 +21,7 @@ type StudentProfile = {
 };
 
 export default function Profil() {
-  const { claims, signOut } = useAuthContext();
+  const { claims, signOut, bookingStatus, activeAbo } = useAuthContext();
 
   const [student, setStudent] = React.useState<StudentProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -62,7 +62,7 @@ export default function Profil() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <LogoHeader showDateTime />
+        <LogoHeader showDateTime bookingStatus={bookingStatus} activeAbo={activeAbo} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" />
           <Text style={styles.loadingText}>Profil wird geladen...</Text>
@@ -73,12 +73,7 @@ export default function Profil() {
 
   return (
     <View style={styles.container}>
-      <LogoHeader showDateTime />
-
-      {/* Abmelden-Button außerhalb der ScrollView — immer sichtbar */}
-      <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-        <Text style={styles.signOutText}>Abmelden</Text>
-      </TouchableOpacity>
+      <LogoHeader showDateTime bookingStatus={bookingStatus} activeAbo={activeAbo} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
@@ -102,6 +97,11 @@ export default function Profil() {
 
           <Text style={styles.qrText}>{qrValue}</Text>
         </View>
+
+        {/* Abmelden — durch Scrollen erreichbar */}
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+          <Text style={styles.signOutText}>Abmelden</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
 
   content: {
     padding: 14,
-    paddingBottom: 90,
+    paddingBottom: 140,
     gap: 14,
   },
 
@@ -207,10 +207,10 @@ const styles = StyleSheet.create({
 
   signOutBtn: {
     backgroundColor: '#e47676',
-    borderRadius: 0,
-    paddingVertical: 12,
+    borderRadius: 6,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginHorizontal: 0,
+    marginTop: 4,
   },
 
   signOutText: {

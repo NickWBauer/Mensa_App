@@ -30,7 +30,6 @@ export default function Welcome() {
     setErrorMessage('');
 
     const rzUsername = username.trim().toLowerCase();
-    const email = `${rzUsername}@hs-esslingen.de`;
 
     if (!rzUsername || !password) {
       setErrorMessage('Bitte Benutzername und Passwort eingeben.');
@@ -53,25 +52,15 @@ export default function Welcome() {
         return;
       }
 
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (authError) {
-        setErrorMessage('Benutzername oder Passwort ist falsch.');
-        setLoading(false);
-        return;
-      }
-
-      const { data: student, error: studentError } = await supabase
-        .from('students')
+      const { data: student } = await supabase
+        .from('StudentenHochschule')
         .select('*')
-        .eq('username', rzUsername)
+        .eq('RZ-Kennung', rzUsername)
+        .eq('Passwort', password)
         .maybeSingle();
 
-      if (studentError || !student) {
-        setErrorMessage('Dieser Benutzer ist nicht in students registriert.');
+      if (!student) {
+        setErrorMessage('Benutzername oder Passwort ist falsch.');
         setLoading(false);
         return;
       }
