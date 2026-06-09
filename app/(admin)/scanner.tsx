@@ -65,31 +65,14 @@ function isBeforePickupDeadline() {
   return now < deadline;
 }
 
-function parsePreis(preis: string) {
-  return parseFloat(preis.replace('€', '').replace(',', '.').trim()) || 0;
-}
-
 async function updateOrderStatus(ids: number[], status: 'abgeholt' | 'verfallen' | 'storniert' | 'bestellt') {
   if (ids.length === 0) return { error: null };
   return supabase.from('Bestellungen').update({ status }).in('id', ids);
 }
 
-async function createOffeneSchuld(userId: string | null | undefined, amount: number) {
-  if (amount <= 0) return { error: null };
-  const schuld = {
-    user_id: userId || undefined,
-    betrag: Number(amount.toFixed(2)),
-    faellig_seit: todayIso(),
-    bezahlt: false,
-  };
-  return supabase.from('offene_schulden').insert(schuld);
-}
-
 async function handleDeadlineExpiredForOrders(rows: BestellungRow[]) {
   if (rows.length === 0) return;
   const ids = rows.map(r => r.id);
-  const amount = rows.reduce((sum, row) => sum + parsePreis(row.preis), 0);
-  const userId = rows[0]?.auth_user_id ?? rows[0]?.email ?? null;
 
   const { error: updateError } = await updateOrderStatus(ids, 'verfallen');
   if (updateError) {
@@ -97,16 +80,7 @@ async function handleDeadlineExpiredForOrders(rows: BestellungRow[]) {
     return;
   }
 
-  const { error: debtError } = await createOffeneSchuld(userId, amount);
-  if (debtError) {
-    Alert.alert('Fehler', `Schulden konnten nicht gespeichert werden: ${debtError.message}`);
-    return;
-  }
-
-  Alert.alert(
-    'Abholfrist abgelaufen',
-    `Die Bestellung ist nicht mehr abholbar. Offen: ${amount.toFixed(2).replace('.', ',')} €`
-  );
+  Alert.alert('Abholfrist abgelaufen', 'Die Abholzeit ist abgelaufen. Die Bestellung wurde storniert.');
 }
 
 function gruppiereBestellungen(rows: BestellungRow[]): BestellungGruppe[] {

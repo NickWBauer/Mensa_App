@@ -74,7 +74,7 @@ export default function Register() {
               <TextInput
                 value={username}
                 onChangeText={setUsername}
-                placeholder="z.B. mohawt00"
+                placeholder="z.B. mamuwt01"
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={styles.input}

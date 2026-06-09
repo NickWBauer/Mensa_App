@@ -62,39 +62,3 @@ export function useOpenOrdersCountActions() {
   return { adjustOpenOrdersCount, setOpenOrdersCount };
 }
 
-export function useOpenDebtSum() {
-  const [sum, setSum] = useState<number>(0);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadDebt() {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-      if (!userId) {
-        setSum(0);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('offene_schulden')
-        .select('betrag')
-        .eq('user_id', userId);
-
-      if (!active) return;
-      if (error) {
-        setSum(0);
-      } else {
-        setSum((data ?? []).reduce((acc, item) => acc + Number(item.betrag ?? 0), 0));
-      }
-    }
-
-    loadDebt();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  return sum;
-}

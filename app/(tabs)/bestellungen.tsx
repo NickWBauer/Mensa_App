@@ -1,25 +1,27 @@
-import LogoHeader from '@/components/logo-header';
+import LogoHeader, { BookingStatus } from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
-import { useOpenDebtSum } from '@/hooks/use-open-orders-count';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Linking,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 // ─── Hilfsfunktionen ────────────────────────────────────────────────────────
 
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+const ALLE_ALLERGENE = ['Gluten', 'Milch', 'Ei', 'Fisch', 'Sellerie', 'Senf', 'Nüsse', 'Soja', 'Sesam'];
+const MAX_BESTELLUNGEN = 3;
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -42,10 +44,16 @@ function todayIso(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+function nextWeekdayIso(): string {
+  const d = new Date();
+  do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+  return d.toISOString().split('T')[0];
+}
+
 /** Montag bis Freitag der übernächsten Woche */
 function getUebernachsteWoche(): string[] {
   const today = new Date();
-  const dow = today.getDay(); // 0=So
+  const dow = today.getDay();
   const daysToMonday = dow === 0 ? 1 : 8 - dow;
   const nextMonday = new Date(today);
   nextMonday.setDate(today.getDate() + daysToMonday + 7);
@@ -60,9 +68,42 @@ function preisToNumber(preis: string): number {
   return parseFloat(preis.replace('€', '').replace(',', '.').trim()) || 0;
 }
 
+/** Berechnet den Buchungs-Status basierend auf Bestellungen und aktueller Uhrzeit */
+function computeBookingStatus(rows: BestellungRow[]): BookingStatus {
+  const now = new Date();
+  const today = todayIso();
+
+  const pickupStart = new Date(); pickupStart.setHours(11, 0, 0, 0);
+  const pickupEnd   = new Date(); pickupEnd.setHours(13, 15, 0, 0);
+
+  const isInPickupWindow = now >= pickupStart && now < pickupEnd;
+  const isPickupOver     = now >= pickupEnd;
+
+  const nextDate = isPickupOver ? nextWeekdayIso() : today;
+  const hasBooking = rows.some(
+    r => r.bestell_datum === nextDate && (r.status === 'bestellt' || !r.status),
+  );
+
+  if (isInPickupWindow && hasBooking) return 'orange';
+  if (hasBooking) return 'gruen';
+  return 'rot';
+}
+
+/** Matching-Logik: Gibt true zurück wenn das Gericht die Abo-Kriterien erfüllt */
+function matchesAbo(abo: AboSettings, meal: SpeiseplanEintrag): boolean {
+  if (abo.ausgeschlossene_allergene.length > 0 && meal.Allergene) {
+    const mealAllergene = meal.Allergene.split(',').map(a => a.trim().toLowerCase());
+    for (const a of abo.ausgeschlossene_allergene) {
+      if (mealAllergene.includes(a.toLowerCase())) return false;
+    }
+  }
+  if (abo.vegetarisch && meal.ernaehrungstyp === 'nicht vegetarisch') return false;
+  return true;
+}
+
 // ─── Typen ───────────────────────────────────────────────────────────────────
 
-type SubTab = 'vorbestellung' | 'meine' | 'guthaben';
+type SubTab = 'vorbestellung' | 'meine' | 'abo';
 
 type SpeiseplanEintrag = {
   id: number;
@@ -73,6 +114,7 @@ type SpeiseplanEintrag = {
   PreisBedienstet: string;
   PreisGast: string;
   image_url: string;
+  ernaehrungstyp?: 'vegan' | 'vegetarisch' | 'nicht vegetarisch' | null;
 };
 
 type Mengenwahl = { studierende: number; bedienstete: number; gaeste: number };
@@ -104,22 +146,49 @@ type BestellungGruppe = {
   isPast: boolean;
 };
 
+type AboSettings = {
+  aktiv: boolean;
+  // 1=Mo, 2=Di, 3=Mi, 4=Do, 5=Fr
+  wochentage: number[];
+  ausgeschlossene_allergene: string[];
+  vegetarisch: boolean;
+};
+
 // ─── Hauptkomponente ─────────────────────────────────────────────────────────
 
 export default function Bestellungen() {
+  const { profile, signOut } = useAuthContext();
   const [activeTab, setActiveTab] = useState<SubTab>('vorbestellung');
+  const [bookingRows, setBookingRows] = useState<BestellungRow[]>([]);
+
+  const email = profile?.['E-Mail'] as string | undefined;
+
+  // Status-Fetch: nur aktuelle + zukünftige Bestellungen laden
+  useEffect(() => {
+    if (!email) return;
+    supabase
+      .from('Bestellungen')
+      .select('id, bestell_datum, status')
+      .eq('email', email)
+      .gte('bestell_datum', todayIso())
+      .then(({ data }) => setBookingRows((data ?? []) as BestellungRow[]));
+  }, [email]);
+
+  const status = computeBookingStatus(bookingRows);
 
   return (
     <View style={styles.container}>
-      <LogoHeader showDateTime />
+      <LogoHeader showDateTime bookingStatus={status} onSignOut={signOut} />
 
-      <NavItem label="Vorbestellung" active={activeTab === 'vorbestellung'} onPress={() => setActiveTab('vorbestellung')} />
-      <NavItem label="Meine Bestellungen" active={activeTab === 'meine'} onPress={() => setActiveTab('meine')} />
-      <NavItem label="Guthaben" active={activeTab === 'guthaben'} onPress={() => setActiveTab('guthaben')} />
+      <View style={styles.navBar}>
+        <NavItem label="Vorbestellung"    active={activeTab === 'vorbestellung'} onPress={() => setActiveTab('vorbestellung')} />
+        <NavItem label="Meine Bestellungen" active={activeTab === 'meine'}       onPress={() => setActiveTab('meine')} />
+        <NavItem label="Bestellabo"       active={activeTab === 'abo'}           onPress={() => setActiveTab('abo')} />
+      </View>
 
       {activeTab === 'vorbestellung' && <VorbestellungContent />}
-      {activeTab === 'meine' && <MeineBestellungenContent />}
-      {activeTab === 'guthaben' && <GuthabenContent />}
+      {activeTab === 'meine'         && <MeineBestellungenContent onBookingsChanged={rows => setBookingRows(rows)} />}
+      {activeTab === 'abo'           && <AboContent />}
     </View>
   );
 }
@@ -142,13 +211,10 @@ function VorbestellungContent() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-
-  // mealId → { studierende, bedienstete, gaeste }
   const [mengen, setMengen] = useState<Record<number, Mengenwahl>>({});
 
   const scrollRef = useRef<ScrollView>(null);
   const prevCartLengthRef = useRef(0);
-
   const wochentage = getUebernachsteWoche();
 
   useEffect(() => {
@@ -166,13 +232,15 @@ function VorbestellungContent() {
       });
   }, []);
 
+  const gesamtAnzahl = Object.values(mengen).reduce(
+    (sum, w) => sum + w.studierende + w.bedienstete + w.gaeste, 0,
+  );
+
   const setMenge = (mealId: number, kat: keyof Mengenwahl, delta: number) => {
+    if (delta > 0 && gesamtAnzahl >= MAX_BESTELLUNGEN) return;
     setMengen(prev => {
       const curr = prev[mealId] ?? { studierende: 0, bedienstete: 0, gaeste: 0 };
-      return {
-        ...prev,
-        [mealId]: { ...curr, [kat]: Math.max(0, curr[kat] + delta) },
-      };
+      return { ...prev, [mealId]: { ...curr, [kat]: Math.max(0, curr[kat] + delta) } };
     });
   };
 
@@ -193,20 +261,16 @@ function VorbestellungContent() {
     return sum
       + w.studierende * preisToNumber(m.PreisStudierende)
       + w.bedienstete * preisToNumber(m.PreisBedienstet)
-      + w.gaeste * preisToNumber(m.PreisGast);
+      + w.gaeste      * preisToNumber(m.PreisGast);
   }, 0);
 
   const handleSubmit = async () => {
     setShowConfirm(false);
     setSubmitting(true);
     setError('');
-
     try {
       const email = profile?.['E-Mail'] as string | undefined;
-      if (!email) {
-        setError('Keine E-Mail-Adresse gefunden.');
-        return;
-      }
+      if (!email) { setError('Keine E-Mail-Adresse gefunden.'); return; }
 
       const authResult = await supabase.auth.getUser();
       const authUserId = authResult.data?.user?.id ?? null;
@@ -214,27 +278,22 @@ function VorbestellungContent() {
       const rows: Omit<BestellungRow, 'id'>[] = [];
       for (const meal of cartItems) {
         const w = mengen[meal.id] ?? { studierende: 0, bedienstete: 0, gaeste: 0 };
-        for (let i = 0; i < w.studierende; i++) {
+        for (let i = 0; i < w.studierende; i++)
           rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Studierende', preis: meal.PreisStudierende, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
-        }
-        for (let i = 0; i < w.bedienstete; i++) {
+        for (let i = 0; i < w.bedienstete; i++)
           rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Bedienstete', preis: meal.PreisBedienstet, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
-        }
-        for (let i = 0; i < w.gaeste; i++) {
+        for (let i = 0; i < w.gaeste; i++)
           rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Gäste', preis: meal.PreisGast, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
-        }
       }
-
       if (rows.length === 0) return;
+      if (rows.length > MAX_BESTELLUNGEN) {
+        setError(`Maximal ${MAX_BESTELLUNGEN} Bestellungen pro Person erlaubt.`);
+        return;
+      }
 
       const { error: insertError } = await supabase.from('Bestellungen').insert(rows);
-
-      if (insertError) {
-        setError(`Bestellung konnte nicht gespeichert werden. (${insertError.message})`);
-      } else {
-        setMengen({});
-        setSuccess(true);
-      }
+      if (insertError) setError(`Bestellung konnte nicht gespeichert werden. (${insertError.message})`);
+      else { setMengen({}); setSuccess(true); }
     } catch (e: any) {
       setError(`Fehler: ${e?.message ?? 'Unbekannter Fehler'}`);
     } finally {
@@ -259,13 +318,25 @@ function VorbestellungContent() {
   }
 
   const wocheStart = wochentage[0];
-  const wocheEnde = wochentage[4];
+  const wocheEnde  = wochentage[4];
   const wocheLabel = `${isoToDate(wocheStart).getDate()}.${pad(isoToDate(wocheStart).getMonth() + 1)} – ${isoToDate(wocheEnde).getDate()}.${pad(isoToDate(wocheEnde).getMonth() + 1)}.${isoToDate(wocheEnde).getFullYear()}`;
 
   return (
     <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent}>
       <Text style={styles.sectionTitle}>Vorbestellung</Text>
       <Text style={styles.infoText}>Zeitraum: {wocheLabel}</Text>
+
+      {/* Bestellzähler – immer sichtbar sobald Speiseplan geladen */}
+      {!loading && (
+        <View style={[styles.zaehlerBar, gesamtAnzahl >= MAX_BESTELLUNGEN && styles.zaehlerBarVoll]}>
+          <Text style={styles.zaehlerText}>
+            {gesamtAnzahl}/{MAX_BESTELLUNGEN} Bestellungen genutzt
+          </Text>
+          {gesamtAnzahl >= MAX_BESTELLUNGEN && (
+            <Text style={styles.zaehlerLimit}>Maximale Anzahl erreicht</Text>
+          )}
+        </View>
+      )}
 
       {cartItems.length > 0 && (
         <View style={styles.cartBox}>
@@ -276,7 +347,7 @@ function VorbestellungContent() {
               <View key={m.id} style={{ marginBottom: 2 }}>
                 {w.studierende > 0 && <Text style={styles.cartLine}>{w.studierende}× {m.Gerichtname} – Studierende ({isoToShort(m.Ausgabedatum)})</Text>}
                 {w.bedienstete > 0 && <Text style={styles.cartLine}>{w.bedienstete}× {m.Gerichtname} – Bedienstete ({isoToShort(m.Ausgabedatum)})</Text>}
-                {w.gaeste > 0 && <Text style={styles.cartLine}>{w.gaeste}× {m.Gerichtname} – Gäste ({isoToShort(m.Ausgabedatum)})</Text>}
+                {w.gaeste > 0      && <Text style={styles.cartLine}>{w.gaeste}× {m.Gerichtname} – Gäste ({isoToShort(m.Ausgabedatum)})</Text>}
               </View>
             );
           })}
@@ -288,15 +359,13 @@ function VorbestellungContent() {
           >
             {submitting
               ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={styles.primaryBtnText}>Bestellung abschicken</Text>
-            }
+              : <Text style={styles.primaryBtnText}>Bestellung abschicken</Text>}
           </TouchableOpacity>
         </View>
       )}
 
       {loading && <ActivityIndicator color="#0066cc" style={{ marginTop: 20 }} />}
-      {!!error && <Text style={styles.errorText}>{error}</Text>}
-
+      {!!error  && <Text style={styles.errorText}>{error}</Text>}
       {!loading && speiseplan.length === 0 && (
         <Text style={styles.emptyText}>Für diesen Zeitraum ist noch kein Speiseplan hinterlegt.</Text>
       )}
@@ -306,16 +375,18 @@ function VorbestellungContent() {
         return (
           <View key={meal.id} style={styles.card}>
             <Text style={styles.dateLabel}>{isoToGerman(meal.Ausgabedatum)}</Text>
-            {!!meal.image_url && (
-              <Image source={{ uri: meal.image_url }} style={styles.mealImage} resizeMode="cover" />
-            )}
+            {!!meal.image_url && <Image source={{ uri: meal.image_url }} style={styles.mealImage} resizeMode="cover" />}
             <Text style={styles.mealName}>{meal.Gerichtname}</Text>
             {!!meal.Allergene && <Text style={styles.allergenText}>Allergene: {meal.Allergene}</Text>}
-
+            {!!meal.ernaehrungstyp && (
+              <View style={[styles.ernaehrungBadge, ernBadgeColor(meal.ernaehrungstyp)]}>
+                <Text style={styles.ernaehrungText}>{meal.ernaehrungstyp}</Text>
+              </View>
+            )}
             <View style={styles.mengenBlock}>
-              <MengeRow label="Studierende" preis={meal.PreisStudierende} wert={w.studierende} onPlus={() => setMenge(meal.id, 'studierende', 1)} onMinus={() => setMenge(meal.id, 'studierende', -1)} />
-              <MengeRow label="Bedienstete" preis={meal.PreisBedienstet} wert={w.bedienstete} onPlus={() => setMenge(meal.id, 'bedienstete', 1)} onMinus={() => setMenge(meal.id, 'bedienstete', -1)} />
-              <MengeRow label="Gäste" preis={meal.PreisGast} wert={w.gaeste} onPlus={() => setMenge(meal.id, 'gaeste', 1)} onMinus={() => setMenge(meal.id, 'gaeste', -1)} />
+              <MengeRow label="Studierende" preis={meal.PreisStudierende} wert={w.studierende} maxReached={gesamtAnzahl >= MAX_BESTELLUNGEN} onPlus={() => setMenge(meal.id, 'studierende', 1)} onMinus={() => setMenge(meal.id, 'studierende', -1)} />
+              <MengeRow label="Bedienstete" preis={meal.PreisBedienstet}  wert={w.bedienstete} maxReached={gesamtAnzahl >= MAX_BESTELLUNGEN} onPlus={() => setMenge(meal.id, 'bedienstete', 1)} onMinus={() => setMenge(meal.id, 'bedienstete', -1)} />
+              <MengeRow label="Gäste"       preis={meal.PreisGast}        wert={w.gaeste}      maxReached={gesamtAnzahl >= MAX_BESTELLUNGEN} onPlus={() => setMenge(meal.id, 'gaeste', 1)}      onMinus={() => setMenge(meal.id, 'gaeste', -1)} />
             </View>
           </View>
         );
@@ -331,7 +402,7 @@ function VorbestellungContent() {
                 <View key={m.id} style={{ marginBottom: 4 }}>
                   {w.studierende > 0 && <Text style={styles.dialogLine}>{w.studierende}× {m.Gerichtname} – Studierende ({isoToShort(m.Ausgabedatum)})</Text>}
                   {w.bedienstete > 0 && <Text style={styles.dialogLine}>{w.bedienstete}× {m.Gerichtname} – Bedienstete ({isoToShort(m.Ausgabedatum)})</Text>}
-                  {w.gaeste > 0 && <Text style={styles.dialogLine}>{w.gaeste}× {m.Gerichtname} – Gäste ({isoToShort(m.Ausgabedatum)})</Text>}
+                  {w.gaeste > 0      && <Text style={styles.dialogLine}>{w.gaeste}× {m.Gerichtname} – Gäste ({isoToShort(m.Ausgabedatum)})</Text>}
                 </View>
               );
             })}
@@ -351,17 +422,25 @@ function VorbestellungContent() {
   );
 }
 
-function MengeRow({ label, preis, wert, onPlus, onMinus }: {
-  label: string; preis: string; wert: number; onPlus: () => void; onMinus: () => void;
+function ernBadgeColor(typ: string) {
+  if (typ === 'vegan')      return { backgroundColor: '#2a7a2a' };
+  if (typ === 'vegetarisch') return { backgroundColor: '#5a8a2a' };
+  return { backgroundColor: '#888' };
+}
+
+function MengeRow({ label, preis, wert, onPlus, onMinus, maxReached = false }: {
+  label: string; preis: string; wert: number; onPlus: () => void; onMinus: () => void; maxReached?: boolean;
 }) {
   return (
     <View style={styles.mengeRow}>
       <Text style={styles.mengeLabel}>{wert}x {label}</Text>
       <Text style={styles.mengePreis}>{preis}</Text>
-      <TouchableOpacity style={styles.mengeBtn} onPress={onMinus}>
-        <Text style={styles.mengeBtnText}>−</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.mengeBtn} onPress={onPlus}>
+      <TouchableOpacity style={styles.mengeBtn} onPress={onMinus}><Text style={styles.mengeBtnText}>−</Text></TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.mengeBtn, maxReached && styles.mengeBtnDisabled]}
+        onPress={onPlus}
+        disabled={maxReached}
+      >
         <Text style={styles.mengeBtnText}>+</Text>
       </TouchableOpacity>
     </View>
@@ -372,7 +451,7 @@ function MengeRow({ label, preis, wert, onPlus, onMinus }: {
 
 type PreisInfo = { studierende: string; bedienstete: string; gaeste: string };
 
-function MeineBestellungenContent() {
+function MeineBestellungenContent({ onBookingsChanged }: { onBookingsChanged?: (rows: BestellungRow[]) => void }) {
   const { profile } = useAuthContext();
   const [rows, setRows] = useState<BestellungRow[]>([]);
   const [preiseLookup, setPreiseLookup] = useState<Record<string, PreisInfo>>({});
@@ -395,13 +474,14 @@ function MeineBestellungenContent() {
       .select('*')
       .eq('email', email)
       .order('bestell_datum', { ascending: false });
+
     if (err) {
       setError('Bestellungen konnten nicht geladen werden.');
     } else {
       const bestellungRows = (data ?? []) as BestellungRow[];
       setRows(bestellungRows);
+      onBookingsChanged?.(bestellungRows.filter(r => r.bestell_datum >= todayIso()));
 
-      // Speiseplan-Preise für alle vorkommenden Daten nachladen
       const uniqueDaten = [...new Set(bestellungRows.map(r => r.bestell_datum))];
       if (uniqueDaten.length > 0) {
         const { data: spData } = await supabase
@@ -424,7 +504,42 @@ function MeineBestellungenContent() {
 
   useEffect(() => { ladeBestellungen(); }, [ladeBestellungen]);
 
-  // Gruppieren: key = "gericht_name|bestell_datum"
+  // 13:15-Automatik: nicht abgeholte Bestellungen auf "verfallen" setzen
+  useEffect(() => {
+    if (rows.length === 0) return;
+
+    const checkDeadline = async () => {
+      const today = todayIso();
+      const offeneIds = rows
+        .filter(r => r.bestell_datum === today && (r.status === 'bestellt' || !r.status))
+        .map(r => r.id);
+
+      if (offeneIds.length === 0) return;
+
+      await supabase
+        .from('Bestellungen')
+        .update({ status: 'verfallen' })
+        .in('id', offeneIds);
+
+      // TODO: Supabase Edge Function aufrufen für E-Mail-Versand
+      // TODO: freien Bestand im Speiseplan erhöhen
+
+      ladeBestellungen();
+    };
+
+    const now = new Date();
+    const deadline = new Date();
+    deadline.setHours(13, 15, 0, 0);
+    const ms = deadline.getTime() - now.getTime();
+
+    if (ms <= 0) {
+      checkDeadline();
+    } else {
+      const timer = setTimeout(checkDeadline, ms);
+      return () => clearTimeout(timer);
+    }
+  }, [rows]);
+
   const gruppen: BestellungGruppe[] = (() => {
     const map: Record<string, BestellungRow[]> = {};
     for (const r of rows) {
@@ -435,16 +550,16 @@ function MeineBestellungenContent() {
     const today = todayIso();
     return Object.entries(map).map(([key, reihen]) => {
       const erste = reihen[0];
-      const stud = reihen.filter(r => r.kategorie === 'Studierende');
-      const bed = reihen.filter(r => r.kategorie === 'Bedienstete');
+      const stud   = reihen.filter(r => r.kategorie === 'Studierende');
+      const bed    = reihen.filter(r => r.kategorie === 'Bedienstete');
       const gaeste = reihen.filter(r => r.kategorie === 'Gäste');
       const spPreise = preiseLookup[key];
-      const preisS = stud[0]?.preis ?? spPreise?.studierende ?? '0,00 €';
-      const preisB = bed[0]?.preis ?? spPreise?.bedienstete ?? '0,00 €';
-      const preisG = gaeste[0]?.preis ?? spPreise?.gaeste ?? '0,00 €';
+      const preisS = stud[0]?.preis   ?? spPreise?.studierende ?? '0,00 €';
+      const preisB = bed[0]?.preis    ?? spPreise?.bedienstete ?? '0,00 €';
+      const preisG = gaeste[0]?.preis ?? spPreise?.gaeste      ?? '0,00 €';
       const gesamt = (
-        stud.length * preisToNumber(preisS) +
-        bed.length * preisToNumber(preisB) +
+        stud.length   * preisToNumber(preisS) +
+        bed.length    * preisToNumber(preisB) +
         gaeste.length * preisToNumber(preisG)
       ).toFixed(2).replace('.', ',') + ' €';
       return {
@@ -464,24 +579,18 @@ function MeineBestellungenContent() {
     }).sort((a, b) => a.bestell_datum.localeCompare(b.bestell_datum));
   })();
 
-  const laufende = gruppen.filter(g => !g.isPast);
-  const vergangene = gruppen.filter(g => g.isPast).reverse();
+  const laufende   = gruppen.filter(g => !g.isPast);
+  const vergangene = gruppen.filter(g =>  g.isPast).reverse();
 
   const startEdit = async (g: BestellungGruppe) => {
     setEditKey(g.key);
-    setEditMengen({
-      studierende: g.anzahl_studierende,
-      bedienstete: g.anzahl_bedienstete,
-      gaeste: g.anzahl_gaeste,
-    });
-
+    setEditMengen({ studierende: g.anzahl_studierende, bedienstete: g.anzahl_bedienstete, gaeste: g.anzahl_gaeste });
     const { data: sp } = await supabase
       .from('Speiseplan')
       .select('PreisStudierende, PreisBedienstet, PreisGast')
       .eq('Ausgabedatum', g.bestell_datum)
       .eq('Gerichtname', g.gericht_name)
       .maybeSingle();
-
     setEditPreise({
       studierende: sp?.PreisStudierende ?? g.preis_studierende,
       bedienstete: sp?.PreisBedienstet  ?? g.preis_bedienstete,
@@ -492,35 +601,21 @@ function MeineBestellungenContent() {
   const handleSave = async (g: BestellungGruppe) => {
     if (!email) return;
     setSaving(true);
-
-    const idsToDelete = rows
-      .filter(r => `${r.gericht_name}|${r.bestell_datum}` === g.key)
-      .map(r => r.id);
-
+    const idsToDelete = rows.filter(r => `${r.gericht_name}|${r.bestell_datum}` === g.key).map(r => r.id);
     const { error: delErr } = await supabase.from('Bestellungen').delete().in('id', idsToDelete);
-    if (delErr) {
-      Alert.alert('Fehler', 'Bestellung konnte nicht aktualisiert werden.');
-      setSaving(false);
-      return;
-    }
+    if (delErr) { Alert.alert('Fehler', 'Bestellung konnte nicht aktualisiert werden.'); setSaving(false); return; }
 
     const authResult = await supabase.auth.getUser();
     const authUserId = authResult.data?.user?.id ?? null;
-
     const newRows: Omit<BestellungRow, 'id'>[] = [];
     for (let i = 0; i < editMengen.studierende; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Studierende', preis: editPreise.studierende, image_url: g.image_url, auth_user_id: authUserId as any });
     for (let i = 0; i < editMengen.bedienstete; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Bedienstete', preis: editPreise.bedienstete, image_url: g.image_url, auth_user_id: authUserId as any });
-    for (let i = 0; i < editMengen.gaeste; i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Gäste', preis: editPreise.gaeste, image_url: g.image_url, auth_user_id: authUserId as any });
+    for (let i = 0; i < editMengen.gaeste;      i++) newRows.push({ email, gericht_name: g.gericht_name, bestell_datum: g.bestell_datum, kategorie: 'Gäste',      preis: editPreise.gaeste,      image_url: g.image_url, auth_user_id: authUserId as any });
 
     if (newRows.length > 0) {
       const { error: insErr } = await supabase.from('Bestellungen').insert(newRows);
-      if (insErr) {
-        Alert.alert('Fehler', 'Bestellung konnte nicht gespeichert werden.');
-        setSaving(false);
-        return;
-      }
+      if (insErr) { Alert.alert('Fehler', 'Bestellung konnte nicht gespeichert werden.'); setSaving(false); return; }
     }
-
     setEditKey(null);
     setSaving(false);
     ladeBestellungen();
@@ -538,9 +633,8 @@ function MeineBestellungenContent() {
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
       <Text style={styles.sectionTitle}>Meine Bestellungen</Text>
-
       {loading && <ActivityIndicator color="#0066cc" style={{ marginTop: 20 }} />}
-      {!!error && <Text style={styles.errorText}>{error}</Text>}
+      {!!error  && <Text style={styles.errorText}>{error}</Text>}
 
       {!loading && (
         <>
@@ -548,8 +642,7 @@ function MeineBestellungenContent() {
           {laufende.length === 0 && <Text style={styles.emptyText}>Keine laufenden Bestellungen.</Text>}
           {laufende.map(g => (
             <BestellungKarte
-              key={g.key}
-              gruppe={g}
+              key={g.key} gruppe={g}
               isEditing={editKey === g.key}
               editMengen={editMengen}
               editPreise={editKey === g.key ? editPreise : undefined}
@@ -562,7 +655,6 @@ function MeineBestellungenContent() {
             />
           ))}
 
-          {/* Vergangene Bestellungen */}
           {vergangene.length > 0 && (
             <TouchableOpacity style={styles.vergangeneHeader} onPress={() => setVergangeneOffen(v => !v)}>
               <Text style={styles.vergangeneLabel}>Vergangene Bestellungen ({vergangene.length})</Text>
@@ -570,19 +662,11 @@ function MeineBestellungenContent() {
             </TouchableOpacity>
           )}
           {vergangeneOffen && vergangene.map(g => (
-            <BestellungKarte
-              key={g.key}
-              gruppe={g}
-              isEditing={false}
-              editMengen={editMengen}
-              saving={false}
-              vergangen
-            />
+            <BestellungKarte key={g.key} gruppe={g} isEditing={false} editMengen={editMengen} saving={false} vergangen />
           ))}
         </>
       )}
 
-      {/* Stornierungsdialog */}
       <Modal transparent visible={!!storniereKey} animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.dialog}>
@@ -593,10 +677,7 @@ function MeineBestellungenContent() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.dialogConfirmBtn}
-                onPress={() => {
-                  const g = gruppen.find(x => x.key === storniereKey);
-                  if (g) handleStornieren(g);
-                }}
+                onPress={() => { const g = gruppen.find(x => x.key === storniereKey); if (g) handleStornieren(g); }}
               >
                 <Text style={styles.dialogConfirmText}>Ja, stornieren</Text>
               </TouchableOpacity>
@@ -630,18 +711,14 @@ function BestellungKarte({
 
   const editGesamt = (
     editMengen.studierende * preisToNumber(preisStud) +
-    editMengen.bedienstete * preisToNumber(preisBed) +
+    editMengen.bedienstete * preisToNumber(preisBed)  +
     editMengen.gaeste      * preisToNumber(preisGaes)
   ).toFixed(2).replace('.', ',') + ' €';
 
   return (
     <View style={[styles.card, vergangen && styles.cardVergangen]}>
-      <Text style={[styles.dateLabel, vergangen && styles.dateLabelVergangen]}>
-        {isoToGerman(g.bestell_datum)}
-      </Text>
-      {!!g.image_url && (
-        <Image source={{ uri: g.image_url }} style={styles.mealImage} resizeMode="cover" />
-      )}
+      <Text style={[styles.dateLabel, vergangen && styles.dateLabelVergangen]}>{isoToGerman(g.bestell_datum)}</Text>
+      {!!g.image_url && <Image source={{ uri: g.image_url }} style={styles.mealImage} resizeMode="cover" />}
       <Text style={[styles.mealName, vergangen && styles.mealNameVergangen]}>{g.gericht_name}</Text>
 
       {isEditing ? (
@@ -661,16 +738,12 @@ function BestellungKarte({
         <>
           {g.anzahl_studierende > 0 && <Text style={styles.karteZeile}>{g.anzahl_studierende}x Studierende</Text>}
           {g.anzahl_bedienstete > 0 && <Text style={styles.karteZeile}>{g.anzahl_bedienstete}x Bedienstete</Text>}
-          {g.anzahl_gaeste > 0 && <Text style={styles.karteZeile}>{g.anzahl_gaeste}x Gäste</Text>}
+          {g.anzahl_gaeste      > 0 && <Text style={styles.karteZeile}>{g.anzahl_gaeste}x Gäste</Text>}
           <Text style={styles.kartGesamt}>Gesamt: {g.gesamt}</Text>
           {!vergangen && (
             <View style={styles.aktionenRow}>
-              <TouchableOpacity style={styles.stornBtn} onPress={onStornieren}>
-                <Text style={styles.stornBtnText}>Stornieren</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.editBtn} onPress={onEdit}>
-                <Text style={styles.editBtnText}>Bearbeiten</Text>
-              </TouchableOpacity>
+              <TouchableOpacity style={styles.stornBtn} onPress={onStornieren}><Text style={styles.stornBtnText}>Stornieren</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.editBtn}  onPress={onEdit}><Text style={styles.editBtnText}>Bearbeiten</Text></TouchableOpacity>
             </View>
           )}
         </>
@@ -679,25 +752,227 @@ function BestellungKarte({
   );
 }
 
-// ─── Guthaben ─────────────────────────────────────────────────────────────────
+// ─── Bestellabo ───────────────────────────────────────────────────────────────
 
-function GuthabenContent() {
-  const openDebtSum = useOpenDebtSum();
+function AboContent() {
+  const { profile } = useAuthContext();
+  const email = profile?.['E-Mail'] as string | undefined;
+
+  const [abo, setAbo] = useState<AboSettings>({
+    aktiv: false,
+    wochentage: [],
+    ausgeschlossene_allergene: [],
+    vegetarisch: false,
+  });
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [message, setMessage]   = useState('');
+
+  // Abo laden
+  useEffect(() => {
+    if (!email) return;
+    supabase
+      .from('bestellabos')
+      .select('*')
+      .eq('email', email)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setAbo({
+            aktiv: data.aktiv ?? false,
+            wochentage: data.wochentage ?? [],
+            ausgeschlossene_allergene: data.ausgeschlossene_allergene ?? [],
+            vegetarisch: data.vegetarisch ?? false,
+          });
+        }
+        setLoading(false);
+      });
+  }, [email]);
+
+  const toggleWochentag = (dow: number) => {
+    setAbo(prev => ({
+      ...prev,
+      wochentage: prev.wochentage.includes(dow)
+        ? prev.wochentage.filter(d => d !== dow)
+        : [...prev.wochentage, dow].sort(),
+    }));
+  };
+
+  const toggleAllergen = (a: string) => {
+    setAbo(prev => ({
+      ...prev,
+      ausgeschlossene_allergene: prev.ausgeschlossene_allergene.includes(a)
+        ? prev.ausgeschlossene_allergene.filter(x => x !== a)
+        : [...prev.ausgeschlossene_allergene, a],
+    }));
+  };
+
+  const speichern = async () => {
+    if (!email) return;
+    setSaving(true);
+    setMessage('');
+    const authResult = await supabase.auth.getUser();
+    const authUserId = authResult.data?.user?.id ?? null;
+
+    const payload = {
+      email,
+      auth_user_id: authUserId,
+      aktiv: abo.aktiv,
+      wochentage: abo.wochentage,
+      ausgeschlossene_allergene: abo.ausgeschlossene_allergene,
+      vegetarisch: abo.vegetarisch,
+    };
+
+    const { error } = await supabase
+      .from('bestellabos')
+      .upsert(payload, { onConflict: 'email' });
+
+    setSaving(false);
+    setMessage(error ? `Fehler: ${error.message}` : 'Abo-Einstellungen gespeichert.');
+  };
+
+  // Abo jetzt anwenden: automatisch für die Zitwoche bestellen
+  const aboAnwenden = async () => {
+    if (!email || !abo.aktiv || abo.wochentage.length === 0) return;
+    setApplying(true);
+    setMessage('');
+
+    const wochentage = getUebernachsteWoche(); // ['2026-06-22', ...]
+    const { data: speiseplan } = await supabase
+      .from('Speiseplan')
+      .select('*')
+      .in('Ausgabedatum', wochentage);
+
+    const authResult = await supabase.auth.getUser();
+    const authUserId = authResult.data?.user?.id ?? null;
+
+    const rows: Omit<BestellungRow, 'id'>[] = [];
+    for (const meal of (speiseplan ?? []) as SpeiseplanEintrag[]) {
+      const dow = isoToDate(meal.Ausgabedatum).getDay(); // 1=Mo...5=Fr
+      if (!abo.wochentage.includes(dow)) continue;
+      if (!matchesAbo(abo, meal)) continue;
+
+      // Prüfen ob bereits bestellt
+      const { data: existing } = await supabase
+        .from('Bestellungen')
+        .select('id')
+        .eq('email', email)
+        .eq('bestell_datum', meal.Ausgabedatum)
+        .limit(1);
+
+      if (existing && existing.length > 0) continue;
+
+      rows.push({
+        email,
+        gericht_name: meal.Gerichtname,
+        bestell_datum: meal.Ausgabedatum,
+        kategorie: 'Studierende',
+        preis: meal.PreisStudierende,
+        image_url: meal.image_url,
+        auth_user_id: authUserId as any,
+        status: 'bestellt',
+      });
+    }
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from('Bestellungen').insert(rows);
+      setMessage(error ? `Fehler: ${error.message}` : `${rows.length} Bestellung(en) automatisch aufgegeben.`);
+    } else {
+      setMessage('Keine neuen Bestellungen (bereits bestellt oder kein passendes Gericht).');
+    }
+    setApplying(false);
+  };
+
+  if (loading) return <ActivityIndicator color="#0066cc" style={{ marginTop: 30 }} />;
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
-      <Text style={styles.sectionTitle}>Guthaben</Text>
-      <View style={styles.debtCard}>
-        <Text style={styles.debtLabel}>Offene Schulden:</Text>
-        <Text style={styles.debtValue}>{openDebtSum.toFixed(2).replace('.', ',')} €</Text>
+      <Text style={styles.sectionTitle}>Bestellabo</Text>
+
+      {/* Hinweistext */}
+      <View style={styles.aboHinweis}>
+        <Ionicons name="warning-outline" size={18} color="#a05000" style={{ marginTop: 1 }} />
+        <Text style={styles.aboHinweisText}>
+          Bitte stornieren Sie Ihr Abo manuell, wenn Sie an einem Tag nicht kommen (z. B. Vorlesungsausfall).
+        </Text>
       </View>
-      <Text style={styles.balanceLabel}>Guthaben aufladen:</Text>
-      <Text
-        style={styles.link}
-        onPress={() => Linking.openURL('https://www.sw-stuttgart.de/geld-laden')}
+
+      {/* Abo aktiv */}
+      <View style={styles.aboRow}>
+        <Text style={styles.aboLabel}>Abo aktiv</Text>
+        <Switch
+          value={abo.aktiv}
+          onValueChange={v => setAbo(prev => ({ ...prev, aktiv: v }))}
+          trackColor={{ true: '#18345d' }}
+        />
+      </View>
+
+      {/* Wochentage */}
+      <Text style={styles.aboSectionLabel}>Wochentage</Text>
+      <View style={styles.wochentageRow}>
+        {[1, 2, 3, 4, 5].map(dow => (
+          <TouchableOpacity
+            key={dow}
+            style={[styles.tagChip, abo.wochentage.includes(dow) && styles.tagChipActive]}
+            onPress={() => toggleWochentag(dow)}
+          >
+            <Text style={[styles.tagChipText, abo.wochentage.includes(dow) && styles.tagChipTextActive]}>
+              {WEEKDAY_SHORT[dow]}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Allergene ausschließen */}
+      <Text style={styles.aboSectionLabel}>Allergene ausschließen</Text>
+      <View style={styles.allergenGrid}>
+        {ALLE_ALLERGENE.map(a => {
+          const aktiv = abo.ausgeschlossene_allergene.includes(a);
+          return (
+            <TouchableOpacity
+              key={a}
+              style={[styles.allergenChip, aktiv && styles.allergenChipActive]}
+              onPress={() => toggleAllergen(a)}
+            >
+              <Text style={[styles.allergenChipText, aktiv && styles.allergenChipTextActive]}>{a}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Vegetarisch */}
+      <View style={styles.aboRow}>
+        <Text style={styles.aboLabel}>Nur vegetarisch / vegan</Text>
+        <Switch
+          value={abo.vegetarisch}
+          onValueChange={v => setAbo(prev => ({ ...prev, vegetarisch: v }))}
+          trackColor={{ true: '#18345d' }}
+        />
+      </View>
+
+      {/* Aktionen */}
+      <TouchableOpacity
+        style={[styles.primaryBtn, saving && styles.btnDisabled]}
+        onPress={speichern}
+        disabled={saving}
       >
-        www.sw-stuttgart.de/geld-laden
-      </Text>
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Einstellungen speichern</Text>}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.secondaryBtn, { marginTop: 8 }, (!abo.aktiv || applying) && styles.btnDisabled]}
+        onPress={aboAnwenden}
+        disabled={!abo.aktiv || applying}
+      >
+        {applying
+          ? <ActivityIndicator color="#18345d" />
+          : <Text style={styles.secondaryBtnText}>Abo jetzt anwenden (übernächste Woche)</Text>}
+      </TouchableOpacity>
+
+      {!!message && (
+        <Text style={[styles.infoText, { marginTop: 12 }]}>{message}</Text>
+      )}
     </ScrollView>
   );
 }
@@ -706,146 +981,84 @@ function GuthabenContent() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
-  scrollContent: { padding: 14, paddingBottom: 110 },
+  scrollContent: { padding: 14, paddingBottom: 140 },
 
+  navBar: { flexDirection: 'row' },
   navBtn: {
+    flex: 1,
     backgroundColor: '#2277bb',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 13,
+    alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#1a5f99',
   },
   navBtnActive: { backgroundColor: '#18345d' },
-  navLabel: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
+  navLabel: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
 
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#18345d', marginBottom: 6 },
-  infoText: { fontSize: 13, color: '#555', marginBottom: 14 },
+  sectionTitle:    { fontSize: 18, fontWeight: '700', color: '#18345d', marginBottom: 6 },
+  infoText:        { fontSize: 13, color: '#555', marginBottom: 14 },
   subSectionLabel: { fontSize: 14, fontWeight: '700', color: '#333', marginBottom: 8, marginTop: 4 },
-  emptyText: { fontSize: 13, color: '#888', marginTop: 8 },
-  errorText: { fontSize: 13, color: '#cc0000', marginTop: 8 },
+  emptyText:       { fontSize: 13, color: '#888', marginTop: 8 },
+  errorText:       { fontSize: 13, color: '#cc0000', marginTop: 8 },
 
   card: {
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#99bbdd',
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: '#fff',
+    borderRadius: 8, borderWidth: 1.5, borderColor: '#99bbdd',
+    padding: 12, marginBottom: 12, backgroundColor: '#fff',
   },
   cardVergangen: { borderColor: '#cccccc', backgroundColor: '#f7f7f7' },
 
-  dateLabel: { fontSize: 13, fontWeight: '700', color: '#0055cc', marginBottom: 8 },
-  dateLabelVergangen: { color: '#888888' },
-  mealImage: { width: '100%', height: 150, borderRadius: 6, marginBottom: 8 },
-  mealName: { fontSize: 15, fontWeight: '700', color: '#222', marginBottom: 4 },
+  dateLabel:         { fontSize: 13, fontWeight: '700', color: '#0055cc', marginBottom: 8 },
+  dateLabelVergangen:{ color: '#888888' },
+  mealImage:         { width: '100%', height: 150, borderRadius: 6, marginBottom: 8 },
+  mealName:          { fontSize: 15, fontWeight: '700', color: '#222', marginBottom: 4 },
   mealNameVergangen: { color: '#777' },
-  allergenText: { fontSize: 12, color: '#888', marginBottom: 8 },
+  allergenText:      { fontSize: 12, color: '#888', marginBottom: 6 },
+
+  ernaehrungBadge: { alignSelf: 'flex-start', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 8 },
+  ernaehrungText:  { fontSize: 11, fontWeight: '700', color: '#fff' },
 
   mengenBlock: { marginTop: 8, gap: 6 },
-  mengeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  mengeLabel: { flex: 1, fontSize: 13, color: '#333' },
-  mengePreis: { fontSize: 13, color: '#555', marginRight: 4 },
-  mengeBtn: {
-    width: 32, height: 32, borderRadius: 6,
-    backgroundColor: '#6655cc', justifyContent: 'center', alignItems: 'center',
-  },
-  mengeBtnText: { fontSize: 18, color: '#fff', fontWeight: '700', lineHeight: 22 },
+  mengeRow:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  mengeLabel:  { flex: 1, fontSize: 13, color: '#333' },
+  mengePreis:  { fontSize: 13, color: '#555', marginRight: 4 },
+  mengeBtn:        { width: 32, height: 32, borderRadius: 6, backgroundColor: '#6655cc', justifyContent: 'center', alignItems: 'center' },
+  mengeBtnDisabled:{ backgroundColor: '#cccccc' },
+  mengeBtnText:    { fontSize: 18, color: '#fff', fontWeight: '700', lineHeight: 22 },
 
-  compactCartBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#18345d',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
+  zaehlerBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#eef4ff', borderRadius: 8, borderWidth: 1.5,
+    borderColor: '#99bbdd', paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12,
   },
-  compactCartInfo: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
-  compactCartBtn: {
-    backgroundColor: '#2ecc71',
-    borderRadius: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  compactCartBtnText: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
+  zaehlerBarVoll: { backgroundColor: '#fff0e0', borderColor: '#e08030' },
+  zaehlerText:    { fontSize: 13, fontWeight: '700', color: '#18345d' },
+  zaehlerLimit:   { fontSize: 12, fontWeight: '700', color: '#e05800' },
 
   cartBox: {
-    backgroundColor: '#f0f4ff',
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#99bbdd',
-    padding: 14,
-    marginBottom: 12,
+    backgroundColor: '#f0f4ff', borderRadius: 8,
+    borderWidth: 1.5, borderColor: '#99bbdd', padding: 14, marginBottom: 12,
   },
-  cartTitle: { fontSize: 14, fontWeight: '700', color: '#18345d', marginBottom: 8 },
-  cartLine: { fontSize: 13, color: '#333', marginBottom: 2 },
-  cartGesamt: { fontSize: 14, fontWeight: '700', color: '#18345d', marginTop: 8, marginBottom: 12 },
+  cartTitle:   { fontSize: 14, fontWeight: '700', color: '#18345d', marginBottom: 8 },
+  cartLine:    { fontSize: 13, color: '#333', marginBottom: 2 },
+  cartGesamt:  { fontSize: 14, fontWeight: '700', color: '#18345d', marginTop: 8, marginBottom: 12 },
 
-  stickyCartBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#18345d',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 10,
-  },
-  stickyCartInfo: { flex: 1 },
-  stickyCartAnzahl: { fontSize: 12, color: '#aaccee' },
-  stickyCartPreis: { fontSize: 18, fontWeight: '700', color: '#ffffff' },
-  stickyCartBtn: {
-    backgroundColor: '#2ecc71',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  stickyCartBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-
-  dialogTitle: { fontSize: 15, fontWeight: '700', color: '#18345d', marginBottom: 10 },
-  dialogLine: { fontSize: 13, color: '#444', marginBottom: 2 },
-  dialogGesamt: { fontSize: 14, fontWeight: '700', color: '#18345d', marginTop: 8, marginBottom: 16 },
-  kartGesamt: { fontSize: 13, fontWeight: '700', color: '#333', marginTop: 6, marginBottom: 8 },
-
-  karteZeile: { fontSize: 13, color: '#444', marginBottom: 2 },
-
-  aktionenRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  stornBtn: {
-    flex: 1, backgroundColor: '#6655cc', borderRadius: 6,
-    paddingVertical: 10, alignItems: 'center',
-  },
-  stornBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  editBtn: {
-    flex: 1, backgroundColor: '#6655cc', borderRadius: 6,
-    paddingVertical: 10, alignItems: 'center',
-  },
-  editBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-
-  primaryBtn: {
-    backgroundColor: '#18345d', borderRadius: 6,
-    paddingVertical: 12, alignItems: 'center', marginBottom: 8,
-  },
+  primaryBtn:     { backgroundColor: '#18345d', borderRadius: 6, paddingVertical: 12, alignItems: 'center', marginBottom: 8 },
   primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  secondaryBtn: {
-    borderWidth: 1.5, borderColor: '#18345d', borderRadius: 6,
-    paddingVertical: 10, alignItems: 'center',
-  },
-  secondaryBtnText: { color: '#18345d', fontSize: 14, fontWeight: '600' },
-  btnDisabled: { opacity: 0.5 },
+  secondaryBtn:   { borderWidth: 1.5, borderColor: '#18345d', borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
+  secondaryBtnText:{ color: '#18345d', fontSize: 14, fontWeight: '600' },
+  btnDisabled:    { opacity: 0.5 },
 
-  successBox: {
-    backgroundColor: '#e8f8e8', borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#66bb66',
-    padding: 20, gap: 12,
-  },
+  successBox:   { backgroundColor: '#e8f8e8', borderRadius: 8, borderWidth: 1.5, borderColor: '#66bb66', padding: 20, gap: 12 },
   successTitle: { fontSize: 16, fontWeight: '700', color: '#226622' },
-  successText: { fontSize: 13, color: '#336633', lineHeight: 20 },
+  successText:  { fontSize: 13, color: '#336633', lineHeight: 20 },
+
+  kartGesamt:  { fontSize: 13, fontWeight: '700', color: '#333', marginTop: 6, marginBottom: 8 },
+  karteZeile:  { fontSize: 13, color: '#444', marginBottom: 2 },
+  aktionenRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  stornBtn:    { flex: 1, backgroundColor: '#6655cc', borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
+  stornBtnText:{ color: '#fff', fontSize: 13, fontWeight: '700' },
+  editBtn:     { flex: 1, backgroundColor: '#6655cc', borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
+  editBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   vergangeneHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -853,48 +1066,47 @@ const styles = StyleSheet.create({
   },
   vergangeneLabel: { fontSize: 14, fontWeight: '700', color: '#555' },
 
-  balanceLabel: { fontSize: 16, fontWeight: '700', color: '#222', marginTop: 6 },
-  link: { fontSize: 14, color: '#0066cc', textDecorationLine: 'underline', marginTop: 4 },
-  debtCard: {
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#dd9999',
-    backgroundColor: '#fff4f4',
-    padding: 12,
-    marginBottom: 12,
-  },
-  debtLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#a00000',
-    marginBottom: 6,
-  },
-  debtValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#660000',
-  },
-
-  overlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center', alignItems: 'center',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   dialog: {
-    backgroundColor: '#fff', borderRadius: 10,
-    padding: 24, marginHorizontal: 32,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 10,
+    backgroundColor: '#fff', borderRadius: 10, padding: 24, marginHorizontal: 32,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10,
   },
-  dialogText: { fontSize: 15, color: '#222', textAlign: 'center', marginBottom: 20 },
-  dialogButtons: { flexDirection: 'row', gap: 12 },
-  dialogCancelBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 6,
-    borderWidth: 1.5, borderColor: '#aaa', alignItems: 'center',
-  },
+  dialogTitle:      { fontSize: 15, fontWeight: '700', color: '#18345d', marginBottom: 10 },
+  dialogLine:       { fontSize: 13, color: '#444', marginBottom: 2 },
+  dialogGesamt:     { fontSize: 14, fontWeight: '700', color: '#18345d', marginTop: 8, marginBottom: 16 },
+  dialogText:       { fontSize: 15, color: '#222', textAlign: 'center', marginBottom: 20 },
+  dialogButtons:    { flexDirection: 'row', gap: 12 },
+  dialogCancelBtn:  { flex: 1, paddingVertical: 10, borderRadius: 6, borderWidth: 1.5, borderColor: '#aaa', alignItems: 'center' },
   dialogCancelText: { fontSize: 14, color: '#555' },
-  dialogConfirmBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 6,
-    backgroundColor: '#18a050', alignItems: 'center',
+  dialogConfirmBtn: { flex: 1, paddingVertical: 10, borderRadius: 6, backgroundColor: '#18a050', alignItems: 'center' },
+  dialogConfirmText:{ fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  // Abo-spezifisch
+  aboHinweis: {
+    flexDirection: 'row', gap: 8, backgroundColor: '#fff7e6',
+    borderRadius: 8, borderWidth: 1.5, borderColor: '#e0a040',
+    padding: 12, marginBottom: 16,
   },
-  dialogConfirmText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  aboHinweisText: { flex: 1, fontSize: 13, color: '#7a3f00', lineHeight: 18 },
+  aboRow:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  aboLabel:       { fontSize: 14, fontWeight: '600', color: '#222' },
+  aboSectionLabel:{ fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 8 },
+
+  wochentageRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  tagChip: {
+    flex: 1, paddingVertical: 8, borderRadius: 6, borderWidth: 1.5, borderColor: '#aaa',
+    alignItems: 'center',
+  },
+  tagChipActive:     { backgroundColor: '#18345d', borderColor: '#18345d' },
+  tagChipText:       { fontSize: 13, fontWeight: '600', color: '#555' },
+  tagChipTextActive: { color: '#fff' },
+
+  allergenGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  allergenChip: {
+    paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6,
+    borderWidth: 1.5, borderColor: '#aaa', backgroundColor: '#fff',
+  },
+  allergenChipActive:    { backgroundColor: '#cc3333', borderColor: '#cc3333' },
+  allergenChipText:      { fontSize: 13, color: '#333' },
+  allergenChipTextActive:{ color: '#fff', fontWeight: '700' },
 });

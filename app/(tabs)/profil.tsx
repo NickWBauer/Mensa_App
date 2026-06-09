@@ -75,6 +75,11 @@ export default function Profil() {
     <View style={styles.container}>
       <LogoHeader showDateTime />
 
+      {/* Abmelden-Button außerhalb der ScrollView — immer sichtbar */}
+      <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+        <Text style={styles.signOutText}>Abmelden</Text>
+      </TouchableOpacity>
+
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Nutzerdaten:</Text>
@@ -97,10 +102,6 @@ export default function Profil() {
 
           <Text style={styles.qrText}>{qrValue}</Text>
         </View>
-
-        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Abmelden</Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -206,9 +207,10 @@ const styles = StyleSheet.create({
 
   signOutBtn: {
     backgroundColor: '#e47676',
-    borderRadius: 8,
-    paddingVertical: 14,
+    borderRadius: 0,
+    paddingVertical: 12,
     alignItems: 'center',
+    marginHorizontal: 0,
   },
 
   signOutText: {
