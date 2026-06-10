@@ -5,14 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 // ─── Typen ───────────────────────────────────────────────────────────────────
@@ -82,6 +82,7 @@ export default function Uebersicht() {
   const [speiseplanHeute, setSpeiseplanHeute] = useState<SpeiseplanEintrag | null>(null);
   const [zahlen, setZahlen] = useState<BestellungZahlen>({ studierende: 0, bedienstete: 0, gaeste: 0 });
   const [freieEssen, setFreieEssen] = useState<FreieEssenRow | null>(null);
+  const [verfalleneAnzahl, setVerfalleneAnzahl] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // Freie Essen – lokale Bearbeitung
@@ -98,7 +99,7 @@ export default function Uebersicht() {
   // Vollständiger Ladevorgang (einmalig beim Tab-Wechsel)
   const ladeDaten = useCallback(async () => {
     setLoading(true);
-    const [{ data: sp }, { data: bestellungen }, { data: frei }] = await Promise.all([
+    const [{ data: sp }, { data: bestellungen }, { data: frei }, { count: verfallen }] = await Promise.all([
       supabase
         .from('Speiseplan')
         .select('id, Ausgabedatum, Gerichtname, Allergene, image_url')
@@ -113,6 +114,11 @@ export default function Uebersicht() {
         .select('*')
         .eq('datum', today)
         .maybeSingle(),
+      supabase
+        .from('Bestellungen')
+        .select('*', { count: 'exact', head: true })
+        .eq('bestell_datum', today)
+        .eq('status', 'verfallen'),
     ]);
 
     setSpeiseplanHeute(sp ?? null);
@@ -124,9 +130,25 @@ export default function Uebersicht() {
       gaeste: liste.filter(b => b.kategorie === 'Gäste').length,
     });
 
-    const anzahl = frei?.anzahl ?? 0;
-    setFreieEssen(frei ?? null);
-    setLokaleAnzahl(anzahl);
+    const verfalleneHeute = verfallen ?? 0;
+    setVerfalleneAnzahl(verfalleneHeute);
+
+    // Auto-Sync: verfallene Bestellungen einmalig in FreieEssen übernehmen
+    if (!frei && verfalleneHeute > 0 && sp) {
+      await supabase.from('FreieEssen').insert({
+        speiseplan_id: sp.id,
+        datum: today,
+        anzahl: verfalleneHeute,
+      });
+      const { data: freiNeu } = await supabase
+        .from('FreieEssen').select('*').eq('datum', today).maybeSingle();
+      setFreieEssen(freiNeu ?? null);
+      setLokaleAnzahl(freiNeu?.anzahl ?? verfalleneHeute);
+    } else {
+      setFreieEssen(frei ?? null);
+      setLokaleAnzahl(frei?.anzahl ?? 0);
+    }
+
     setFreiGeaendert(false);
     setLoading(false);
   }, [today]);
@@ -279,6 +301,11 @@ export default function Uebersicht() {
                 <Ionicons name="remove" size={22} color="#fff" />
               </TouchableOpacity>
             </View>
+            {verfalleneAnzahl > 0 && (
+              <Text style={styles.freiHinweis}>
+                ↩ {verfalleneAnzahl} nicht abgeholte Vorbestellung{verfalleneAnzahl !== 1 ? 'en' : ''} automatisch übernommen
+              </Text>
+            )}
 
             {freiGeaendert && (
               <View style={styles.freiAktionen}>
@@ -435,6 +462,7 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.35 },
 
+  freiHinweis: { fontSize: 12, color: '#5a8a5a', marginTop: 8, fontStyle: 'italic' },
   freiAktionen: { flexDirection: 'row', gap: 10, marginTop: 14 },
   verwerfenBtn: {
     flex: 1,

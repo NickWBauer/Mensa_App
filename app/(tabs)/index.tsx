@@ -1,4 +1,5 @@
 import LogoHeader from '@/components/logo-header';
+import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -22,9 +23,56 @@ type Mahlzeit = {
   PreisBedienstet: string;
   PreisGast: string;
   image_url: string;
+  ernaehrungstyp?: 'vegan' | 'vegetarisch' | 'nicht vegetarisch' | null;
 };
 
+function ernBadgeColor(typ: string) {
+  if (typ === 'vegan')       return { backgroundColor: '#2a7a2a' };
+  if (typ === 'vegetarisch') return { backgroundColor: '#5a8a2a' };
+  return { backgroundColor: '#888' };
+}
+
+function PreisSektion({ label, preis, color }: { label: string; preis: string; color: string }) {
+  return (
+    <View style={[styles.preisChip, { borderColor: color }]}>
+      <Text style={[styles.preisChipLabel, { color }]}>{label}</Text>
+      <Text style={[styles.preisChipWert, { color }]}>{preis}</Text>
+    </View>
+  );
+}
+
+function MahlzeitKarte({ meal }: { meal: Mahlzeit }) {
+  return (
+    <View style={styles.mealBlock}>
+      {!!meal.image_url && (
+        <Image
+          source={{ uri: meal.image_url }}
+          style={styles.mealImage}
+          resizeMode="cover"
+        />
+      )}
+      <View style={styles.mealNameRow}>
+        <Text style={styles.mealName}>{meal.Gerichtname}</Text>
+        {!!meal.ernaehrungstyp && meal.ernaehrungstyp !== 'nicht vegetarisch' && (
+          <View style={[styles.ernaehrungBadge, ernBadgeColor(meal.ernaehrungstyp)]}>
+            <Text style={styles.ernaehrungText}>{meal.ernaehrungstyp}</Text>
+          </View>
+        )}
+      </View>
+      {!!meal.Allergene && (
+        <Text style={styles.allergenText}>Allergene: {meal.Allergene}</Text>
+      )}
+      <View style={styles.preisSektionen}>
+        <PreisSektion label="Studierende" preis={meal.PreisStudierende} color="#1a6fbb" />
+        <PreisSektion label="Bedienstete" preis={meal.PreisBedienstet}  color="#7a5c1e" />
+        <PreisSektion label="Gäste"       preis={meal.PreisGast}         color="#555555" />
+      </View>
+    </View>
+  );
+}
+
 export default function Speiseplan() {
+  const { bookingStatus, activeAbo } = useAuthContext();
   const [mahlzeiten, setMahlzeiten] = useState<Mahlzeit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -51,7 +99,7 @@ export default function Speiseplan() {
 
   return (
     <View style={styles.container}>
-      <LogoHeader showDateTime />
+      <LogoHeader showDateTime bookingStatus={bookingStatus} activeAbo={activeAbo} />
 
       {loading && (
         <View style={styles.center}>
@@ -75,38 +123,13 @@ export default function Speiseplan() {
               <View key={date} style={styles.card}>
                 <Text style={styles.dateText}>{isoToGerman(date)}</Text>
                 {meals.map((meal) => (
-                  <View key={meal.id} style={styles.mealBlock}>
-                    {!!meal.image_url && (
-                      <Image
-                        source={{ uri: meal.image_url }}
-                        style={styles.mealImage}
-                        resizeMode="cover"
-                      />
-                    )}
-                    <Text style={styles.mealName}>{meal.Gerichtname}</Text>
-                    {!!meal.Allergene && (
-                      <Text style={styles.allergenText}>Allergene: {meal.Allergene}</Text>
-                    )}
-                    <View style={styles.priceRow}>
-                      <PriceChip label="Studierende" value={meal.PreisStudierende} color="#1a6fbb" />
-                      <PriceChip label="Bedienstete" value={meal.PreisBedienstet} color="#7a5c1e" />
-                      <PriceChip label="Gäste" value={meal.PreisGast} color="#555555" />
-                    </View>
-                  </View>
+                  <MahlzeitKarte key={meal.id} meal={meal} />
                 ))}
               </View>
             ))
           )}
         </ScrollView>
       )}
-    </View>
-  );
-}
-
-function PriceChip({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <View style={[styles.priceChip, { borderColor: color }]}>
-      <Text style={[styles.priceLabel, { color }]}>{label}: {value}</Text>
     </View>
   );
 }
@@ -139,14 +162,26 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginBottom: 8,
   },
-  mealName: { fontSize: 15, fontWeight: '700', color: '#222222', marginBottom: 4 },
+  mealName: { fontSize: 15, fontWeight: '700', color: '#222222' },
   allergenText: { fontSize: 12, color: '#888888', marginBottom: 6 },
-  priceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  priceChip: {
+
+  mealNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
+  ernaehrungBadge: { borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2 },
+  ernaehrungText:  { fontSize: 10, fontWeight: '700', color: '#fff' },
+
+  preisSektionen: { flexDirection: 'row', gap: 5, marginTop: 6 },
+  preisChip: {
+    flex: 1,
+    flexDirection: 'row',
     borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 3,
+    flexWrap: 'nowrap',
   },
-  priceLabel: { fontSize: 11, fontWeight: '600' },
+  preisChipLabel: { fontSize: 9, fontWeight: '700', flexShrink: 1 },
+  preisChipWert:  { fontSize: 10, fontWeight: '700', flexShrink: 0 },
 });
