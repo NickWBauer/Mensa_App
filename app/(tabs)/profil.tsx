@@ -1,9 +1,7 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
-import { supabase } from '@/lib/supabase';
 import React from 'react';
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,64 +10,19 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-type StudentProfile = {
-  username: string;
-  email: string;
-  vorname: string | null;
-  nachname: string | null;
-  matrikelnummer: string | null;
-};
-
 export default function Profil() {
-  const { claims, signOut, bookingStatus, activeAbo } = useAuthContext();
-
-  const [student, setStudent] = React.useState<StudentProfile | null>(null);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    loadStudentProfile();
-  }, []);
-
-  async function loadStudentProfile() {
-    setLoading(true);
-
-    const rzUsername = String(claims?.sub ?? '').trim().toLowerCase();
-
-    const { data, error } = await supabase
-      .from('students')
-      .select('username, email, vorname, nachname, matrikelnummer')
-      .eq('username', rzUsername)
-      .maybeSingle();
-
-    if (!error && data) {
-      setStudent(data as StudentProfile);
-    }
-
-    setLoading(false);
-  }
+  const { claims, profile, signOut, bookingStatus, activeAbo } = useAuthContext();
 
   async function handleSignOut() {
     await signOut();
   }
 
-  const vorname = student?.vorname ?? '';
-  const nachname = student?.nachname ?? '';
-  const matrikelnr = student?.matrikelnummer ?? '';
-  const email = student?.email ?? '';
-  const rzKennung = student?.username ?? String(claims?.sub ?? '');
+  const vorname = profile?.['Vorname'] ?? '';
+  const nachname = profile?.['Nachname'] ?? '';
+  const matrikelnr = profile?.['Matrikelnummer'] ?? '';
+  const email = profile?.['E-Mail'] ?? '';
+  const rzKennung = profile?.['RZ-Kennung'] ?? String(claims?.sub ?? '');
   const qrValue = rzKennung || 'unbekannt';
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <LogoHeader showDateTime bookingStatus={bookingStatus} activeAbo={activeAbo} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Profil wird geladen...</Text>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
