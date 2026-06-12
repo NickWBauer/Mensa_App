@@ -1,49 +1,79 @@
 import LogoHeader from '@/components/logo-header';
-import { Link } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-  Alert,
-  Image,
-  ImageBackground,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    ImageBackground,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
-export default function Register() {
-  const [username, setUsername] = React.useState('');
+export default function ResetPassword() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+
+  const email = String(params.email ?? '').trim().toLowerCase();
+
+  const [code, setCode] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
-  const rzUsername = username.trim().toLowerCase();
-  const email = `${rzUsername}@hs-esslingen.de`;
+  async function handleResetPassword() {
+    if (!email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse übergeben.');
+      return;
+    }
 
-  function validateRegistration() {
-    if (!rzUsername) {
-      Alert.alert('Fehler', 'Bitte geben Sie Ihren RZ-Benutzernamen ein.');
-      return false;
+    if (!code.trim()) {
+      Alert.alert('Fehler', 'Bitte geben Sie den Einmalcode ein.');
+      return;
     }
 
     if (password.length < 6) {
       Alert.alert('Fehler', 'Das Passwort muss mindestens 6 Zeichen lang sein.');
-      return false;
+      return;
     }
 
     if (password !== confirmPassword) {
       Alert.alert('Fehler', 'Die Passwörter stimmen nicht überein.');
-      return false;
+      return;
     }
 
-    return true;
-  }
+    setLoading(true);
 
-  const canContinue =
-    rzUsername.length > 0 &&
-    password.length >= 6 &&
-    password === confirmPassword;
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: code.trim(),
+      type: 'recovery',
+    });
+
+    if (error || !data.user) {
+      setLoading(false);
+      Alert.alert('Fehler', error?.message ?? 'Der Code ist ungültig.');
+      return;
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password,
+    });
+
+    setLoading(false);
+
+    if (updateError) {
+      Alert.alert('Fehler', updateError.message);
+      return;
+    }
+
+    Alert.alert('Erfolgreich', 'Ihr Passwort wurde geändert.');
+    router.replace('/(auth)/welcome' as any);
+  }
 
   return (
     <View style={styles.container}>
@@ -51,13 +81,12 @@ export default function Register() {
 
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <View style={styles.titleBar}>
-          <Text style={styles.titleText}>Registrierung</Text>
+          <Text style={styles.titleText}>Passwort zurücksetzen</Text>
         </View>
 
         <ImageBackground
           source={require('@/assets/images/campus-bg.jpg')}
           style={styles.cardBackground}
-          imageStyle={styles.cardBackgroundImage}
           resizeMode="cover"
         >
           <View style={styles.card}>
@@ -66,52 +95,49 @@ export default function Register() {
               style={styles.logo}
             />
 
-            <Text style={styles.cardTitle}>Neues Konto erstellen</Text>
+            <Text style={styles.cardTitle}>
+              Geben Sie den Einmalcode und Ihr neues Passwort ein.
+            </Text>
+
+            <Text style={styles.infoText}>
+              Der Einmalcode wurde an folgende Hochschul-E-Mail gesendet:
+            </Text>
+
+            <Text style={styles.emailText}>{email}</Text>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>RZ Benutzername</Text>
-
+              <Text style={styles.label}>Einmalcode</Text>
               <TextInput
-                value={username}
-                onChangeText={setUsername}
-                placeholder="z.B. mamuwt01"
-                autoCapitalize="none"
-                autoCorrect={false}
+                value={code}
+                onChangeText={setCode}
+                placeholder="Einmalcode eingeben"
+                keyboardType="number-pad"
                 style={styles.input}
+                editable={!loading}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Hochschul-E-Mail</Text>
-
-              <TextInput
-                value={email}
-                editable={false}
-                style={[styles.input, styles.disabledInput]}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Passwort</Text>
-
+              <Text style={styles.label}>Neues Passwort</Text>
               <TextInput
                 value={password}
                 onChangeText={setPassword}
+                placeholder="Neues Passwort eingeben"
                 secureTextEntry
-                placeholder="Passwort eingeben"
                 style={styles.input}
+                editable={!loading}
               />
             </View>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Passwort wiederholen</Text>
-
               <TextInput
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                secureTextEntry
                 placeholder="Passwort erneut eingeben"
+                secureTextEntry
                 style={styles.input}
+                editable={!loading}
               />
             </View>
 
@@ -121,43 +147,15 @@ export default function Register() {
               </Text>
             ) : null}
 
-            {canContinue ? (
-              <Link
-                href={{
-                  pathname: '/(auth)/einmalcode' as any,
-                  params: {
-                    username: rzUsername,
-                    email,
-                    password,
-                  },
-                }}
-                asChild
-              >
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={() => validateRegistration()}
-                >
-                  <Text style={styles.buttonText}>Registrieren</Text>
-                </TouchableOpacity>
-              </Link>
-            ) : (
-              <TouchableOpacity
-                style={[styles.button, styles.disabledButton]}
-                onPress={() => validateRegistration()}
-              >
-                <Text style={styles.buttonText}>Registrieren</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={styles.divider} />
-
-            <Link href="/(auth)/welcome" asChild>
-              <TouchableOpacity style={styles.externalBox}>
-                <Text style={styles.externalBoxText}>
-                  Bereits registriert? Zum Login
-                </Text>
-              </TouchableOpacity>
-            </Link>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleResetPassword}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>
+                {loading ? 'Wird geändert...' : 'Passwort ändern'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </ImageBackground>
       </ScrollView>
@@ -204,8 +202,6 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
 
-  cardBackgroundImage: {},
-
   card: {
     width: '100%',
     backgroundColor: '#ffffff',
@@ -226,6 +222,21 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     color: '#333333',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+
+  infoText: {
+    fontSize: 14,
+    color: '#444444',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+
+  emailText: {
+    fontSize: 15,
+    color: '#18345d',
+    fontWeight: '700',
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -252,50 +263,19 @@ const styles = StyleSheet.create({
     color: '#111111',
   },
 
-  disabledInput: {
-    backgroundColor: '#eeeeee',
-    color: '#666666',
-  },
-
   button: {
     width: '100%',
     backgroundColor: '#18345d',
     borderRadius: 4,
     paddingVertical: 13,
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 20,
-  },
-
-  disabledButton: {
-    opacity: 0.5,
+    marginTop: 6,
   },
 
   buttonText: {
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 15,
-  },
-
-  divider: {
-    width: '100%',
-    height: 1,
-    backgroundColor: '#e0e0e0',
-    marginBottom: 16,
-  },
-
-  externalBox: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#cccccc',
-    borderRadius: 4,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-
-  externalBoxText: {
-    fontSize: 14,
-    color: '#444444',
   },
 
   errorText: {

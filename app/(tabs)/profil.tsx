@@ -1,7 +1,9 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
+import { supabase } from '@/lib/supabase';
 import React from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,23 +12,90 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
+type Student = {
+  vorname?: string | null;
+  nachname?: string | null;
+  matrikelnummer?: string | null;
+  email?: string | null;
+  username?: string | null;
+  user_id?: string | null;
+};
+
 export default function Profil() {
-  const { claims, profile, signOut, bookingStatus, activeAbo } = useAuthContext();
+  const { claims, signOut, bookingStatus, activeAbo } = useAuthContext();
+
+  const [loading, setLoading] = React.useState(true);
+  const [student, setStudent] = React.useState<Student | null>(null);
+
+  React.useEffect(() => {
+    loadStudentData();
+  }, []);
+
+  async function loadStudentData() {
+    setLoading(true);
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error('Fehler beim Laden des Users:', userError);
+      setLoading(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('students')
+      .select('vorname, nachname, matrikelnummer, email, username, user_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Fehler beim Laden der Studentendaten:', error);
+      setLoading(false);
+      return;
+    }
+
+    setStudent(data);
+    setLoading(false);
+  }
 
   async function handleSignOut() {
     await signOut();
   }
 
-  const vorname = profile?.['Vorname'] ?? '';
-  const nachname = profile?.['Nachname'] ?? '';
-  const matrikelnr = profile?.['Matrikelnummer'] ?? '';
-  const email = profile?.['E-Mail'] ?? '';
-  const rzKennung = profile?.['RZ-Kennung'] ?? String(claims?.sub ?? '');
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <LogoHeader
+          showDateTime
+          bookingStatus={bookingStatus}
+          activeAbo={activeAbo}
+        />
+
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Profil wird geladen...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const vorname = student?.vorname ?? '';
+  const nachname = student?.nachname ?? '';
+  const matrikelnr = student?.matrikelnummer ?? '';
+  const email = student?.email ?? '';
+  const rzKennung = student?.username ?? String(claims?.sub ?? '');
   const qrValue = rzKennung || 'unbekannt';
 
   return (
     <View style={styles.container}>
-      <LogoHeader showDateTime bookingStatus={bookingStatus} activeAbo={activeAbo} />
+      <LogoHeader
+        showDateTime
+        bookingStatus={bookingStatus}
+        activeAbo={activeAbo}
+      />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
@@ -51,7 +120,6 @@ export default function Profil() {
           <Text style={styles.qrText}>{qrValue}</Text>
         </View>
 
-        {/* Abmelden — durch Scrollen erreichbar */}
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Abmelden</Text>
         </TouchableOpacity>

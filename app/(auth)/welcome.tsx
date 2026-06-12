@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import React from 'react';
 import {
+  Alert,
   Image,
   ImageBackground,
   ScrollView,
@@ -30,6 +31,7 @@ export default function Welcome() {
     setErrorMessage('');
 
     const rzUsername = username.trim().toLowerCase();
+    const email = `${rzUsername}@hs-esslingen.de`;
 
     if (!rzUsername || !password) {
       setErrorMessage('Bitte Benutzername und Passwort eingeben.');
@@ -38,12 +40,16 @@ export default function Welcome() {
     }
 
     try {
-      const { data: admin } = await supabase
+      const { data: admin, error: adminError } = await supabase
         .from('AdminNutzer')
-        .select('RZ-Kennung')
+        .select('*')
         .eq('RZ-Kennung', rzUsername)
         .eq('Passwort', password)
         .maybeSingle();
+
+      if (adminError) {
+        console.error('Admin Login Fehler:', adminError);
+      }
 
       if (admin) {
         await signIn(rzUsername);
@@ -52,14 +58,12 @@ export default function Welcome() {
         return;
       }
 
-      const { data: student } = await supabase
-        .from('StudentenHochschule')
-        .select('*')
-        .eq('RZ-Kennung', rzUsername)
-        .eq('Passwort', password)
-        .maybeSingle();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      if (!student) {
+      if (error || !data.user) {
         setErrorMessage('Benutzername oder Passwort ist falsch.');
         setLoading(false);
         return;
@@ -70,11 +74,42 @@ export default function Welcome() {
       setLoading(false);
       router.replace('/(tabs)/bestellungen' as any);
     } catch (error) {
+      console.error('Login Fehler:', error);
       setErrorMessage(
         'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.'
       );
       setLoading(false);
     }
+  }
+
+  async function handleForgotPassword() {
+    const rzUsername = username.trim().toLowerCase();
+
+    if (!rzUsername) {
+      Alert.alert(
+        'RZ-Benutzername fehlt',
+        'Bitte geben Sie zuerst Ihren RZ-Benutzernamen ein.'
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    const email = `${rzUsername}@hs-esslingen.de`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+    setLoading(false);
+
+    if (error) {
+      Alert.alert('Fehler', error.message);
+      return;
+    }
+
+    router.replace({
+      pathname: '/reset-password',
+      params: { email },
+    } as any);
   }
 
   return (
@@ -89,7 +124,6 @@ export default function Welcome() {
         <ImageBackground
           source={require('@/assets/images/campus-bg.jpg')}
           style={styles.cardBackground}
-          imageStyle={styles.cardBackgroundImage}
           resizeMode="cover"
         >
           <View style={styles.card}>
@@ -132,6 +166,7 @@ export default function Welcome() {
                 <TouchableOpacity
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
+                  disabled={loading}
                 >
                   <Ionicons
                     name={showPassword ? 'eye-off' : 'eye'}
@@ -148,8 +183,12 @@ export default function Welcome() {
               onPress={signInWithEmail}
             >
               <Text style={styles.buttonText}>
-                {loading ? 'Wird angemeldet...' : 'Anmelden'}
+                {loading ? 'Bitte warten...' : 'Anmelden'}
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleForgotPassword} disabled={loading}>
+              <Text style={styles.forgotPasswordText}>Passwort vergessen?</Text>
             </TouchableOpacity>
 
             {errorMessage ? (
@@ -175,10 +214,7 @@ export default function Welcome() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
+  container: { flex: 1, backgroundColor: '#ffffff' },
 
   contentContainer: {
     flexGrow: 1,
@@ -212,8 +248,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 20,
   },
-
-  cardBackgroundImage: {},
 
   card: {
     width: '100%',
@@ -285,13 +319,21 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingVertical: 13,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
 
   buttonText: {
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 15,
+  },
+
+  forgotPasswordText: {
+    color: '#18345d',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 16,
+    textDecorationLine: 'underline',
   },
 
   divider: {

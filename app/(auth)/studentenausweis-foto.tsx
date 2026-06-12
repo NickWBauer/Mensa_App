@@ -35,6 +35,8 @@ export default function StudentenausweisFoto() {
   const [nachname, setNachname] = React.useState('');
   const [matrikelnummer, setMatrikelnummer] = React.useState('');
 
+  const fieldsEnabled = !!photoUri && !loading;
+
   const cameraRef = React.useRef<CameraView | null>(null);
 
   async function takePhoto() {
@@ -129,6 +131,14 @@ export default function StudentenausweisFoto() {
   }
 
   async function saveStudentData() {
+    if (!photoUri) {
+      Alert.alert(
+        'Foto erforderlich',
+        'Bitte fotografieren Sie zuerst Ihren Studentenausweis.'
+      );
+      return;
+    }
+
     if (!vorname || !nachname || !matrikelnummer) {
       Alert.alert(
         'Fehlende Daten',
@@ -251,7 +261,7 @@ export default function StudentenausweisFoto() {
             />
 
             <Text style={styles.cardTitle}>
-              Bitte fotografieren Sie Ihren Studentenausweis.
+              Bitte fotografieren Sie zuerst Ihren Studentenausweis.
             </Text>
 
             {photoUri ? (
@@ -272,13 +282,21 @@ export default function StudentenausweisFoto() {
               <Text style={styles.infoText}>Daten werden verarbeitet...</Text>
             ) : null}
 
+            {!photoUri ? (
+              <Text style={styles.lockedInfoText}>
+                Die Eingabefelder werden erst nach dem Fotografieren des
+                Studentenausweises freigeschaltet.
+              </Text>
+            ) : null}
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Vorname</Text>
               <TextInput
                 value={vorname}
                 onChangeText={setVorname}
                 placeholder="Vorname"
-                style={styles.input}
+                editable={fieldsEnabled}
+                style={[styles.input, !fieldsEnabled && styles.disabledInput]}
               />
             </View>
 
@@ -288,7 +306,8 @@ export default function StudentenausweisFoto() {
                 value={nachname}
                 onChangeText={setNachname}
                 placeholder="Nachname"
-                style={styles.input}
+                editable={fieldsEnabled}
+                style={[styles.input, !fieldsEnabled && styles.disabledInput]}
               />
             </View>
 
@@ -299,14 +318,18 @@ export default function StudentenausweisFoto() {
                 onChangeText={setMatrikelnummer}
                 placeholder="Matrikelnummer"
                 keyboardType="number-pad"
-                style={styles.input}
+                editable={fieldsEnabled}
+                style={[styles.input, !fieldsEnabled && styles.disabledInput]}
               />
             </View>
 
             <TouchableOpacity
-              style={styles.button}
+              style={[
+                styles.button,
+                (!photoUri || loading) && styles.disabledButton,
+              ]}
               onPress={saveStudentData}
-              disabled={loading}
+              disabled={loading || !photoUri}
             >
               <Text style={styles.buttonText}>
                 {loading ? 'Wird gespeichert...' : 'Daten speichern'}
@@ -417,6 +440,11 @@ const styles = StyleSheet.create({
     color: '#111111',
   },
 
+  disabledInput: {
+    backgroundColor: '#eeeeee',
+    color: '#888888',
+  },
+
   button: {
     width: '100%',
     backgroundColor: '#18345d',
@@ -424,6 +452,10 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     alignItems: 'center',
     marginBottom: 14,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
   },
 
   buttonText: {
@@ -462,6 +494,13 @@ const styles = StyleSheet.create({
   infoText: {
     color: '#18345d',
     fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+
+  lockedInfoText: {
+    color: '#666666',
+    fontSize: 13,
     marginBottom: 16,
     textAlign: 'center',
   },

@@ -7,9 +7,9 @@ export default function AuthLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="welcome" />
       <Stack.Screen name="register" />
-      <Stack.Screen name="verification" />
       <Stack.Screen name="einmalcode" />
       <Stack.Screen name="studentenausweis-foto" />
+      <Stack.Screen name="reset-password" />
     </Stack>
   );
 }
