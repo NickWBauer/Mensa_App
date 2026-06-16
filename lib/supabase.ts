@@ -8,8 +8,8 @@ const ExpoSecureStoreAdapter = {
 }
 
 export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://qigqefdghcxerfpzxhmj.supabase.co',
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpZ3FlZmRnaGN4ZXJmcHp4aG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMzQ3MTcsImV4cCI6MjA5MTkxMDcxN30.uaGfZIjjOyVEmo0dX5GQrrc6rtGGvSrAlKCnGdmWdnI',
+  process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'http://212.71.201.100:8000',
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_BLNqsIxusJ6bMGSm772Pbz_GIZj85mZ',
   {
     auth: {
       storage: ExpoSecureStoreAdapter as any,
@@ -19,7 +19,3 @@ export const supabase = createClient(
     }
   }
 );
-
-// Datenbank link https://qigqefdghcxerfpzxhmj.supabase.co
-
-// API-Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpZ3FlZmRnaGN4ZXJmcHp4aG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMzQ3MTcsImV4cCI6MjA5MTkxMDcxN30.uaGfZIjjOyVEmo0dX5GQrrc6rtGGvSrAlKCnGdmWdnI
