@@ -1,6 +1,6 @@
-import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
+import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 type OpenOrdersCountContextValue = {
   openOrdersCount: number;
@@ -20,7 +20,7 @@ export function OpenOrdersCountProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    const email = profile?.['E-Mail'];
+    const email = profile?.email;
     if (!email) {
       setOpenOrdersCount(0);
       return;
@@ -39,7 +39,7 @@ export function OpenOrdersCountProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [profile?.['E-Mail']]);
+  }, [profile?.email]);
 
   const value = useMemo(
     () => ({

@@ -26,7 +26,7 @@ type BestellungRow = {
   kategorie: string;
   preis: string;
   auth_user_id?: string | null;
-  status?: 'bestellt' | 'abgeholt' | 'verfallen' | 'storniert';
+  status?: 'bestellt' | 'abgeholt' | 'nicht abgeholt' | 'storniert';
 };
 
 type BestellungGruppe = {
@@ -65,7 +65,7 @@ function isBeforePickupDeadline() {
   return now < deadline;
 }
 
-async function updateOrderStatus(ids: number[], status: 'abgeholt' | 'verfallen' | 'storniert' | 'bestellt') {
+async function updateOrderStatus(ids: number[], status: 'abgeholt' | 'nicht abgeholt' | 'storniert' | 'bestellt') {
   if (ids.length === 0) return { error: null };
   return supabase.from('Bestellungen').update({ status }).in('id', ids);
 }
@@ -74,7 +74,7 @@ async function handleDeadlineExpiredForOrders(rows: BestellungRow[]) {
   if (rows.length === 0) return;
   const ids = rows.map(r => r.id);
 
-  const { error: updateError } = await updateOrderStatus(ids, 'verfallen');
+  const { error: updateError } = await updateOrderStatus(ids, 'nicht abgeholt');
   if (updateError) {
     Alert.alert('Fehler', `Abholfrist konnte nicht verarbeitet werden: ${updateError.message}`);
     return;
@@ -136,6 +136,39 @@ export default function Scanner() {
   >({});
 
   const cooldownRef = useRef(false);
+  async function findStudentByIdentity(identity: string) {
+    const id = String(identity ?? '').trim();
+    const byUsername = await supabase
+      .from('students')
+      .select('email, username, user_id')
+      .eq('username', id)
+      .maybeSingle();
+
+    if (byUsername.data) return byUsername.data;
+    if (byUsername.error) throw byUsername.error;
+
+    if (id.includes('@')) {
+      const byEmail = await supabase
+        .from('students')
+        .select('email, username, user_id')
+        .eq('email', id)
+        .maybeSingle();
+
+      if (byEmail.data) return byEmail.data;
+      if (byEmail.error) throw byEmail.error;
+    }
+
+    const byUserId = await supabase
+      .from('students')
+      .select('email, username, user_id')
+      .eq('user_id', id)
+      .maybeSingle();
+
+    if (byUserId.data) return byUserId.data;
+    if (byUserId.error) throw byUserId.error;
+
+    return null;
+  }
 
   const handleScan = async (rzKennung: string) => {
     if (cooldownRef.current || ladung) return;
@@ -147,25 +180,39 @@ export default function Scanner() {
     try {
       const today = todayIso();
 
-      const [{ data: studentFull }, { data: bestellungen }] = await Promise.all([
-        supabase
-          .from('StudentenHochschule')
-          .select('E-Mail')
-          .eq('RZ-Kennung', rzKennung)
-          .maybeSingle(),
+      const studentFull = await findStudentByIdentity(rzKennung);
+      const { data: bestellungen } = await supabase
+        .from('Bestellungen')
+        .select('id, email, gericht_name, bestell_datum, kategorie, preis, auth_user_id, status')
+        .eq('bestell_datum', today)
+        .or('status.eq.bestellt,status.is.null')
+        .order('gericht_name');
+      const scannedId = String(rzKennung ?? '').trim().replace(/\s+/g, '');
 
-        supabase
-          .from('Bestellungen')
-          .select('id, email, gericht_name, bestell_datum, kategorie, preis, auth_user_id, status')
-          .eq('bestell_datum', today)
-          .eq('status', 'bestellt')
-          .order('gericht_name'),
-      ]);
+      let studentData = studentFull as { email?: string; user_id?: string } | null;
+      let email = studentData?.email;
+      let userId = studentData?.user_id;
 
-      const email = (studentFull as { 'E-Mail'?: string } | null)?.['E-Mail'];
-      const meineBestellungen = email
-        ? (bestellungen ?? []).filter(b => b.email === email) as BestellungRow[]
-        : [];
+      // If no student found, try to find matching orders by scanned id directly (auth_user_id or email)
+      let meineBestellungen: BestellungRow[] = [];
+      if (bestellungen && bestellungen.length > 0) {
+        meineBestellungen = (bestellungen ?? []).filter(b => {
+          if (email && b.email === email) return true;
+          if (userId && b.auth_user_id === userId) return true;
+          // also accept if scanned value matches order.auth_user_id or order.email
+          if (scannedId && b.auth_user_id === scannedId) return true;
+          if (scannedId && b.email === scannedId) return true;
+          return false;
+        }) as BestellungRow[];
+
+        // If we found orders by scannedId but no student row, set userId to scannedId so debug shows it
+        if (meineBestellungen.length > 0 && !studentData) {
+          const first = meineBestellungen[0];
+          userId = first.auth_user_id ?? userId;
+          // try to derive email from first matching order if possible
+          email = first.email ?? email;
+        }
+      }
 
       if (!isBeforePickupDeadline() && meineBestellungen.length > 0) {
         await handleDeadlineExpiredForOrders(meineBestellungen);
@@ -178,9 +225,21 @@ export default function Scanner() {
       const alleIds = meineBestellungen.map((b) => b.id);
 
       if (gruppen.length === 0) {
+        const totalToday = (bestellungen ?? []).length;
+        const matchesByEmail = email ? (bestellungen ?? []).filter(b => b.email === email).length : 0;
+        const matchesByUserId = userId ? (bestellungen ?? []).filter(b => b.auth_user_id === userId).length : 0;
+
+        const debugMsg =
+          `Scanned: ${rzKennung}\n` +
+          `Resolved email: ${email ?? '(none)'}\n` +
+          `Resolved user_id: ${userId ?? '(none)'}\n` +
+          `Orders today (total): ${totalToday}\n` +
+          `Matches by email: ${matchesByEmail}\n` +
+          `Matches by auth_user_id: ${matchesByUserId}`;
+
         Alert.alert(
           'Keine offenen Bestellungen',
-          'Für diesen Nutzer liegt heute keine offene Vorbestellung vor.'
+          `Für diesen Nutzer liegt heute keine offene Vorbestellung vor.\n\n${debugMsg}`
         );
 
         setTimeout(() => {

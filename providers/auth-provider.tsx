@@ -36,7 +36,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     const rows = (data ?? []) as { bestell_datum: string; status?: string }[]
     const now = new Date()
-    const pickupStart = new Date(); pickupStart.setHours(11, 0, 0, 0)
+    const pickupStart = new Date(); pickupStart.setHours(12, 0, 0, 0)
     const pickupEnd   = new Date(); pickupEnd.setHours(13, 15, 0, 0)
     const isInPickupWindow = now >= pickupStart && now < pickupEnd
     const isPickupOver     = now >= pickupEnd
@@ -104,11 +104,24 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   }
 
   const loadProfile = async (rzKennung: string) => {
-    const [{ data: student }, { data: registered }, { data: admin }] = await Promise.all([
-      supabase.from('StudentenHochschule').select('*').eq('RZ-Kennung', rzKennung).maybeSingle(),
-      supabase.from('RegistriertePersonen').select('id').eq('RZ-Kennung', rzKennung).maybeSingle(),
+    const [{ data: studentData }, { data: admin }] = await Promise.all([
+      supabase.from('students').select('*').eq('username', rzKennung).maybeSingle(),
       supabase.from('AdminNutzer').select('*').eq('RZ-Kennung', rzKennung).maybeSingle(),
     ])
+
+    let student = studentData
+    if (!student) {
+      const authUser = await supabase.auth.getUser();
+      const authUserId = authUser.data?.user?.id;
+      if (authUserId) {
+        const { data: studentById } = await supabase
+          .from('students')
+          .select('*')
+          .eq('user_id', authUserId)
+          .maybeSingle();
+        student = studentById;
+      }
+    }
 
     if (admin) {
       setProfile(admin)
@@ -119,8 +132,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     } else {
       setProfile(student)
       setIsAdmin(false)
-      setIsVerified(!!registered)
-      const email = student?.['E-Mail'] as string | undefined
+      setIsVerified(!!student)
+      const email = student?.email as string | undefined
       emailRef.current = email
       if (email) {
         await fetchAndSetBookingStatus(email)

@@ -99,58 +99,79 @@ export default function Uebersicht() {
   // Vollständiger Ladevorgang (einmalig beim Tab-Wechsel)
   const ladeDaten = useCallback(async () => {
     setLoading(true);
-    const [{ data: sp }, { data: bestellungen }, { data: frei }, { count: verfallen }] = await Promise.all([
-      supabase
-        .from('Speiseplan')
-        .select('id, Ausgabedatum, Gerichtname, Allergene, image_url')
-        .eq('Ausgabedatum', today)
-        .maybeSingle(),
-      supabase
-        .from('Bestellungen')
-        .select('kategorie')
-        .eq('bestell_datum', today),
-      supabase
-        .from('FreieEssen')
-        .select('*')
-        .eq('datum', today)
-        .maybeSingle(),
-      supabase
-        .from('Bestellungen')
-        .select('*', { count: 'exact', head: true })
-        .eq('bestell_datum', today)
-        .eq('status', 'verfallen'),
-    ]);
+    try {
+      const results = await Promise.allSettled([
+        supabase
+          .from('Speiseplan')
+          .select('id, Ausgabedatum, Gerichtname, Allergene, image_url')
+          .eq('Ausgabedatum', today)
+          .maybeSingle(),
+        supabase
+          .from('Bestellungen')
+          .select('kategorie')
+          .eq('bestell_datum', today)
+          .or('status.eq.bestellt,status.is.null'),
+        supabase
+          .from('FreieEssen')
+          .select('*')
+          .eq('datum', today)
+          .maybeSingle(),
+        supabase
+          .from('Bestellungen')
+          .select('*', { count: 'exact', head: true })
+          .eq('bestell_datum', today)
+          .eq('status', 'nicht abgeholt'),
+      ]);
 
-    setSpeiseplanHeute(sp ?? null);
+      const spRes = results[0].status === 'fulfilled' ? (results[0] as any).value : null;
+      const bestRes = results[1].status === 'fulfilled' ? (results[1] as any).value : null;
+      const freiRes = results[2].status === 'fulfilled' ? (results[2] as any).value : null;
+      const verfallenRes = results[3].status === 'fulfilled' ? (results[3] as any).value : null;
 
-    const liste = (bestellungen ?? []) as { kategorie: string }[];
-    setZahlen({
-      studierende: liste.filter(b => b.kategorie === 'Studierende').length,
-      bedienstete: liste.filter(b => b.kategorie === 'Bedienstete').length,
-      gaeste: liste.filter(b => b.kategorie === 'Gäste').length,
-    });
+      const sp = spRes?.data ?? null;
+      const bestellungen = bestRes?.data ?? [];
+      const frei = freiRes?.data ?? null;
+      const verfallen = verfallenRes?.count ?? 0;
 
-    const verfalleneHeute = verfallen ?? 0;
-    setVerfalleneAnzahl(verfalleneHeute);
+      setSpeiseplanHeute(sp ?? null);
 
-    // Auto-Sync: verfallene Bestellungen einmalig in FreieEssen übernehmen
-    if (!frei && verfalleneHeute > 0 && sp) {
-      await supabase.from('FreieEssen').insert({
-        speiseplan_id: sp.id,
-        datum: today,
-        anzahl: verfalleneHeute,
+      const liste = (bestellungen ?? []) as { kategorie: string }[];
+      setZahlen({
+        studierende: liste.filter(b => b.kategorie === 'Studierende').length,
+        bedienstete: liste.filter(b => b.kategorie === 'Bedienstete').length,
+        gaeste: liste.filter(b => b.kategorie === 'Gäste').length,
       });
-      const { data: freiNeu } = await supabase
-        .from('FreieEssen').select('*').eq('datum', today).maybeSingle();
-      setFreieEssen(freiNeu ?? null);
-      setLokaleAnzahl(freiNeu?.anzahl ?? verfalleneHeute);
-    } else {
-      setFreieEssen(frei ?? null);
-      setLokaleAnzahl(frei?.anzahl ?? 0);
-    }
 
-    setFreiGeaendert(false);
-    setLoading(false);
+      const verfalleneHeute = verfallen ?? 0;
+      setVerfalleneAnzahl(verfalleneHeute);
+
+      // Auto-Sync: verfallene Bestellungen einmalig in FreieEssen übernehmen
+      if (!frei && verfalleneHeute > 0 && sp) {
+        await supabase.from('FreieEssen').insert({
+          speiseplan_id: sp.id,
+          datum: today,
+          anzahl: verfalleneHeute,
+        });
+        const { data: freiNeu } = await supabase
+          .from('FreieEssen').select('*').eq('datum', today).maybeSingle();
+        setFreieEssen(freiNeu ?? null);
+        setLokaleAnzahl(freiNeu?.anzahl ?? verfalleneHeute);
+      } else {
+        setFreieEssen(frei ?? null);
+        setLokaleAnzahl(frei?.anzahl ?? 0);
+      }
+
+      setFreiGeaendert(false);
+    } catch (err) {
+      console.error('Error loading overview data:', err);
+      setSpeiseplanHeute(null);
+      setZahlen({ studierende: 0, bedienstete: 0, gaeste: 0 });
+      setFreieEssen(null);
+      setLokaleAnzahl(0);
+      setVerfalleneAnzahl(0);
+    } finally {
+      setLoading(false);
+    }
   }, [today]);
 
   // Nur die Bestellzahlen refreshen — kein Loading, kein Flimmern
@@ -158,7 +179,8 @@ export default function Uebersicht() {
     const { data: bestellungen } = await supabase
       .from('Bestellungen')
       .select('kategorie')
-      .eq('bestell_datum', today);
+      .eq('bestell_datum', today)
+      .or('status.eq.bestellt,status.is.null');
 
     const liste = (bestellungen ?? []) as { kategorie: string }[];
     setZahlen({

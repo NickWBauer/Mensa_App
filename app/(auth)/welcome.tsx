@@ -5,15 +5,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import React from 'react';
 import {
-  Alert,
-  Image,
-  ImageBackground,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    ImageBackground,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 export default function Welcome() {
@@ -93,18 +93,7 @@ export default function Welcome() {
       return;
     }
 
-    setLoading(true);
-
     const email = `${rzUsername}@hs-esslingen.de`;
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Fehler', error.message);
-      return;
-    }
 
     router.replace({
       pathname: '/reset-password',
@@ -135,16 +124,17 @@ export default function Welcome() {
             <Text style={styles.cardTitle}>Bei Ihrem Konto anmelden</Text>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>RZ Benutzername</Text>
+              <Text style={styles.label}>RZ-Benutzername (keine E-Mail-Adresse)</Text>
 
               <TextInput
                 value={username}
                 onChangeText={setUsername}
-                placeholder="RZ Benutzername"
+                placeholder="Benutzername"
+                placeholderTextColor="#9b9b9b"
                 autoCapitalize="none"
                 autoCorrect={false}
                 editable={!loading}
-                style={styles.input}
+                style={[styles.input, !username && styles.inputPlaceholder]}
               />
             </View>
 
@@ -156,11 +146,12 @@ export default function Welcome() {
                   value={password}
                   onChangeText={setPassword}
                   placeholder="Passwort"
+                  placeholderTextColor="#9b9b9b"
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!loading}
-                  style={styles.passwordInput}
+                  style={[styles.passwordInput, !password && styles.inputPlaceholder]}
                 />
 
                 <TouchableOpacity
@@ -275,48 +266,64 @@ const styles = StyleSheet.create({
 
   inputContainer: {
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 18,
   },
 
   label: {
     fontSize: 13,
-    color: '#444444',
+    color: '#1f2937',
+    fontWeight: '700',
     marginBottom: 6,
   },
 
   input: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#cccccc',
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
+    borderColor: '#c6c6c6',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1f2937',
   },
 
   passwordRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#cccccc',
-    borderRadius: 4,
-    backgroundColor: '#fafafa',
+    borderColor: '#c6c6c6',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
   },
 
   passwordInput: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+
+  inputPlaceholder: {
+    fontSize: 13,
+    fontWeight: '400',
   },
 
   eyeButton: {
-    paddingHorizontal: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: '#c6c6c6',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    justifyContent: 'center',
   },
 
   button: {
     width: '100%',
     backgroundColor: '#18345d',
-    borderRadius: 4,
+    borderRadius: 8,
     paddingVertical: 13,
     alignItems: 'center',
     marginBottom: 12,

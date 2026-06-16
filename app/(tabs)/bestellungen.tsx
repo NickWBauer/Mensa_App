@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -23,6 +24,11 @@ const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Fr
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 const ALLE_ALLERGENE = ['Gluten', 'Milch', 'Ei', 'Fisch', 'Sellerie', 'Senf', 'Nüsse', 'Soja', 'Sesam'];
 const MAX_BESTELLUNGEN = 3;
+
+const EMAILJS_API_URL = 'https://api.emailjs.com/api/v1.0/email/send';
+const EMAILJS_SERVICE_ID = 'service_46zmvnc';
+const EMAILJS_TEMPLATE_ID = 'template_ugos18i';
+const EMAILJS_PUBLIC_KEY = '83oOfEchy894C2Az9';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -61,6 +67,68 @@ function getUebernachsteWoche(): string[] {
 
 function preisToNumber(preis: string): number {
   return parseFloat(preis.replace('€', '').replace(',', '.').trim()) || 0;
+}
+
+function formatPrice(value: number): string {
+  return `${value.toFixed(2).replace('.', ',')} €`;
+}
+
+function getIsoWeekMonday(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay() === 0 ? 7 : d.getDay();
+  d.setDate(d.getDate() - (day - 1));
+  return d;
+}
+
+function isInCurrentOrNextCalendarWeek(iso: string): boolean {
+  const target = isoToDate(iso);
+  target.setHours(0, 0, 0, 0);
+  const currentMonday = getIsoWeekMonday(new Date());
+  const nextWeekMonday = new Date(currentMonday);
+  nextWeekMonday.setDate(currentMonday.getDate() + 7);
+  const nextWeekSunday = new Date(nextWeekMonday);
+  nextWeekSunday.setDate(nextWeekMonday.getDate() + 6);
+  nextWeekSunday.setHours(23, 59, 59, 999);
+  return target >= currentMonday && target <= nextWeekSunday;
+}
+
+async function sendOrderConfirmationEmail(user: { email?: string | null; user_metadata?: any }, orderRows: Omit<BestellungRow, 'id'>[]) {
+  if (!user?.email) {
+    throw new Error('Keine gültige Empfänger-E-Mail gefunden.');
+  }
+
+  const orderSummary = orderRows
+    .map(row => `1x ${row.gericht_name} | ${isoToShort(row.bestell_datum)} | ${row.kategorie} | ${row.preis}`)
+    .join('\n');
+
+  const totalPrice = orderRows.reduce((sum, row) => sum + preisToNumber(row.preis), 0);
+
+  const body = {
+    service_id: EMAILJS_SERVICE_ID,
+    template_id: EMAILJS_TEMPLATE_ID,
+    user_id: EMAILJS_PUBLIC_KEY,
+    template_params: {
+      to_email: user.email,
+      name: user.user_metadata?.full_name || user.email,
+      gericht: orderSummary,
+      preis: formatPrice(totalPrice),
+      datum: orderRows[0]?.bestell_datum ? isoToShort(orderRows[0].bestell_datum) : '-',
+    },
+  };
+
+  const response = await fetch(EMAILJS_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Bestätigungsmail konnte nicht gesendet werden. ${text}`);
+  }
 }
 
 
@@ -114,7 +182,7 @@ type BestellungRow = {
   preis: string;
   image_url: string;
   auth_user_id?: string | null;
-  status?: 'bestellt' | 'abgeholt' | 'verfallen' | 'storniert';
+  status?: 'bestellt' | 'abgeholt' | 'nicht abgeholt' | 'storniert';
 };
 
 type BestellungGruppe = {
@@ -130,6 +198,7 @@ type BestellungGruppe = {
   preis_gaeste: string;
   gesamt: string;
   isPast: boolean;
+  status?: 'bestellt' | 'abgeholt' | 'nicht abgeholt' | 'storniert';
 };
 
 type AboSettings = {
@@ -182,7 +251,8 @@ function SectionHeader({ title, open, onPress }: { title: string; open: boolean;
 
 function VorbestellungContent() {
   const { profile, refreshBookingStatus, activeAbo } = useAuthContext();
-  const email = profile?.['E-Mail'] as string | undefined;
+  const [authEmail, setAuthEmail] = useState<string | undefined>(undefined);
+  const email = (profile?.email ?? authEmail) as string | undefined;
 
   const [speiseplan, setSpeiseplan] = useState<SpeiseplanEintrag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -232,6 +302,14 @@ function VorbestellungContent() {
   }, [mengen, speiseplan, bestandPerMeal]);
 
 
+  useEffect(() => {
+    const loadAuthEmail = async () => {
+      const { data } = await supabase.auth.getUser();
+      setAuthEmail(data?.user?.email ?? undefined);
+    }
+    loadAuthEmail();
+  }, []);
+
   // Speiseplan laden
   useEffect(() => {
     if (wochentage.length === 0) return;
@@ -260,7 +338,7 @@ function VorbestellungContent() {
         const datumCounts: Record<string, number> = {};
         const mealLookup: Record<string, Mengenwahl> = {};
         for (const row of (data ?? []) as { gericht_name: string; bestell_datum: string; kategorie: string; status?: string }[]) {
-          if (row.status === 'storniert' || row.status === 'verfallen') continue;
+          if (row.status === 'storniert' || row.status === 'nicht abgeholt') continue;
           datumCounts[row.bestell_datum] = (datumCounts[row.bestell_datum] ?? 0) + 1;
           const key = `${row.gericht_name}|${row.bestell_datum}`;
           if (!mealLookup[key]) mealLookup[key] = { studierende: 0, bedienstete: 0, gaeste: 0 };
@@ -311,7 +389,7 @@ function VorbestellungContent() {
             const { data } = await supabase
               .from('Bestellungen').select('id')
               .eq('email', forEmail).eq('gericht_name', gericht).eq('bestell_datum', datum)
-              .eq('kategorie', katStr).neq('status', 'verfallen').neq('status', 'storniert').limit(1);
+              .eq('kategorie', katStr).neq('status', 'nicht abgeholt').neq('status', 'storniert').limit(1);
             if (data && data.length > 0) {
               await supabase.from('Bestellungen').delete().in('id', (data as { id: number }[]).map(r => r.id));
             }
@@ -344,10 +422,20 @@ function VorbestellungContent() {
     setSubmitting(true);
     setError('');
     try {
-      if (!email) { setError('Keine E-Mail-Adresse gefunden.'); return; }
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const user = sessionData?.session?.user;
+      if (sessionError || !user) {
+        setError('Kein eingeloggter Nutzer gefunden.');
+        return;
+      }
 
-      const authResult = await supabase.auth.getUser();
-      const authUserId = authResult.data?.user?.id ?? null;
+      let emailToUse = email ?? user.email ?? undefined;
+      if (!emailToUse) {
+        setError('Keine E-Mail-Adresse gefunden.');
+        return;
+      }
+
+      const authUserId = user.id ?? null;
 
       // Verfallen rows where user reduced below the abo-ordered quantity
       const mealsWithReduction = speiseplan.filter(meal => {
@@ -360,8 +448,8 @@ function VorbestellungContent() {
         const bm = bestandPerMeal[`${meal.Gerichtname}|${meal.Ausgabedatum}`] ?? { studierende: 0, bedienstete: 0, gaeste: 0 };
         const { data: existingRows } = await supabase
           .from('Bestellungen').select('id, kategorie')
-          .eq('email', email).eq('gericht_name', meal.Gerichtname).eq('bestell_datum', meal.Ausgabedatum)
-          .neq('status', 'verfallen').neq('status', 'storniert');
+          .eq('email', emailToUse).eq('gericht_name', meal.Gerichtname).eq('bestell_datum', meal.Ausgabedatum)
+          .neq('status', 'nicht abgeholt').neq('status', 'storniert');
         const r = (existingRows ?? []) as { id: number; kategorie: string }[];
         const toVerfallen = [
           ...r.filter(x => x.kategorie === 'Studierende').slice(0, Math.max(0, bm.studierende - w.studierende)),
@@ -369,7 +457,7 @@ function VorbestellungContent() {
           ...r.filter(x => x.kategorie === 'Gäste').slice(0,      Math.max(0, bm.gaeste      - w.gaeste)),
         ].map(x => x.id);
         if (toVerfallen.length > 0) {
-          await supabase.from('Bestellungen').update({ status: 'verfallen' }).in('id', toVerfallen);
+          await supabase.from('Bestellungen').update({ status: 'nicht abgeholt' }).in('id', toVerfallen);
         }
       }
 
@@ -382,11 +470,11 @@ function VorbestellungContent() {
         const dB = Math.max(0, w.bedienstete - bm.bedienstete);
         const dG = Math.max(0, w.gaeste      - bm.gaeste);
         for (let i = 0; i < dS; i++)
-          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Studierende', preis: meal.PreisStudierende, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
+          rows.push({ email: emailToUse, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Studierende', preis: meal.PreisStudierende, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
         for (let i = 0; i < dB; i++)
-          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Bedienstete', preis: meal.PreisBedienstet, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
+          rows.push({ email: emailToUse, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Bedienstete', preis: meal.PreisBedienstet, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
         for (let i = 0; i < dG; i++)
-          rows.push({ email, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Gäste', preis: meal.PreisGast, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
+          rows.push({ email: emailToUse, gericht_name: meal.Gerichtname, bestell_datum: meal.Ausgabedatum, kategorie: 'Gäste', preis: meal.PreisGast, image_url: meal.image_url, auth_user_id: authUserId as any, status: 'bestellt' });
       }
       if (rows.length === 0 && mealsWithReduction.length === 0) return;
 
@@ -399,10 +487,10 @@ function VorbestellungContent() {
         const { data: existingRows } = await supabase
           .from('Bestellungen')
           .select('id, status')
-          .eq('email', email)
+          .eq('email', emailToUse)
           .eq('bestell_datum', datum);
         const existingCount = (existingRows ?? []).filter(
-          (r: any) => r.status !== 'storniert' && r.status !== 'verfallen',
+          (r: any) => r.status !== 'storniert' && r.status !== 'nicht abgeholt',
         ).length;
         if (existingCount + newCount > MAX_BESTELLUNGEN) {
           const remaining = MAX_BESTELLUNGEN - existingCount;
@@ -420,7 +508,18 @@ function VorbestellungContent() {
           setError(`Bestellung konnte nicht gespeichert werden. (${insertError.message})`);
           return;
         }
+
+        try {
+          await sendOrderConfirmationEmail(user, rows);
+        } catch (mailError: any) {
+          setError(`Bestellung gespeichert, aber Bestätigungsmail konnte nicht gesendet werden. ${mailError?.message ?? ''}`);
+          setMengen({});
+          setSuccess(true);
+          refreshBookingStatus();
+          return;
+        }
       }
+
       setMengen({});
       setSuccess(true);
       refreshBookingStatus();
@@ -623,6 +722,7 @@ type PreisInfo = { studierende: string; bedienstete: string; gaeste: string };
 
 function MeineBestellungenContent() {
   const { profile, refreshBookingStatus } = useAuthContext();
+  const [authEmail, setAuthEmail] = useState<string | undefined>(undefined);
   const [rows, setRows] = useState<BestellungRow[]>([]);
   const [preiseLookup, setPreiseLookup] = useState<Record<string, PreisInfo>>({});
   const [loading, setLoading] = useState(true);
@@ -633,8 +733,17 @@ function MeineBestellungenContent() {
   const [editPreise, setEditPreise] = useState<PreisInfo>({ studierende: '0,00 €', bedienstete: '0,00 €', gaeste: '0,00 €' });
   const [storniereKey, setStorniereKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const email = profile?.['E-Mail'] as string | undefined;
+  const email = (profile?.email ?? authEmail) as string | undefined;
+
+  useEffect(() => {
+    const loadAuthEmail = async () => {
+      const { data } = await supabase.auth.getUser();
+      setAuthEmail(data?.user?.email ?? undefined);
+    }
+    loadAuthEmail();
+  }, []);
 
   const ladeBestellungen = useCallback(async () => {
     if (!email) return;
@@ -673,7 +782,7 @@ function MeineBestellungenContent() {
 
   useEffect(() => { ladeBestellungen(); }, [ladeBestellungen]);
 
-  // 13:15-Automatik: nicht abgeholte Bestellungen auf "verfallen" setzen
+  // 13:15-Automatik: nicht abgeholte Bestellungen auf "nicht abgeholt" setzen
   useEffect(() => {
     if (rows.length === 0) return;
 
@@ -685,9 +794,10 @@ function MeineBestellungenContent() {
 
       if (offeneIds.length === 0) return;
 
+      // Mark unpicked orders as 'nicht abgeholt' but keep them in the Bestellungen table
       await supabase
         .from('Bestellungen')
-        .update({ status: 'verfallen' })
+        .update({ status: 'nicht abgeholt' })
         .in('id', offeneIds);
 
       // TODO: Supabase Edge Function aufrufen für E-Mail-Versand
@@ -712,7 +822,7 @@ function MeineBestellungenContent() {
   const gruppen: BestellungGruppe[] = (() => {
     const map: Record<string, BestellungRow[]> = {};
     for (const r of rows) {
-      if (r.status === 'storniert' || r.status === 'verfallen') continue;
+      if (r.status === 'storniert' || r.status === 'nicht abgeholt') continue;
       const key = `${r.gericht_name}|${r.bestell_datum}`;
       if (!map[key]) map[key] = [];
       map[key].push(r);
@@ -745,12 +855,19 @@ function MeineBestellungenContent() {
         preis_gaeste: preisG,
         gesamt,
         isPast: erste.bestell_datum < today,
+        status: erste.status,
       };
-    }).sort((a, b) => a.bestell_datum.localeCompare(b.bestell_datum));
+    }).filter(g => g.bestell_datum >= today).sort((a, b) => a.bestell_datum.localeCompare(b.bestell_datum));
   })();
 
   const laufende   = gruppen.filter(g => !g.isPast);
   const vergangene = gruppen.filter(g =>  g.isPast).reverse();
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await ladeBestellungen();
+    setRefreshing(false);
+  }, [ladeBestellungen]);
 
   const startEdit = async (g: BestellungGruppe) => {
     setEditKey(g.key);
@@ -771,8 +888,33 @@ function MeineBestellungenContent() {
   const handleSave = async (g: BestellungGruppe) => {
     if (!email) return;
     setSaving(true);
+
+    const activeDateRows = rows.filter(r => r.bestell_datum === g.bestell_datum && r.status !== 'storniert' && r.status !== 'nicht abgeholt');
+    const currentGroupRows = activeDateRows.filter(r => `${r.gericht_name}|${r.bestell_datum}` === g.key);
+    const otherCount = activeDateRows.length - currentGroupRows.length;
+    const newCount = editMengen.studierende + editMengen.bedienstete + editMengen.gaeste;
+    const isLockedForIncrease = isInCurrentOrNextCalendarWeek(g.bestell_datum);
+
+    if (newCount > currentGroupRows.length && isLockedForIncrease) {
+      Alert.alert(
+        'Erhöhung nicht möglich',
+        'Bestellungen für diese und die kommende Kalenderwoche können nicht mehr erhöht werden.'
+      );
+      setSaving(false);
+      return;
+    }
+
+    if (otherCount + newCount > MAX_BESTELLUNGEN) {
+      Alert.alert(
+        'Begrenzung überschritten',
+        `Für ${isoToGerman(g.bestell_datum)} sind maximal ${MAX_BESTELLUNGEN} Essen pro Tag erlaubt. Bitte reduziere die Anzahl.`
+      );
+      setSaving(false);
+      return;
+    }
+
     // Nur aktive Zeilen löschen — stornierte bleiben als Abo-Schutz erhalten
-    const idsToDelete = rows.filter(r => `${r.gericht_name}|${r.bestell_datum}` === g.key && r.status !== 'storniert' && r.status !== 'verfallen').map(r => r.id);
+    const idsToDelete = currentGroupRows.map(r => r.id);
     const { error: delErr } = await supabase.from('Bestellungen').delete().in('id', idsToDelete);
     if (delErr) { Alert.alert('Fehler', 'Bestellung konnte nicht aktualisiert werden.'); setSaving(false); return; }
 
@@ -797,7 +939,7 @@ function MeineBestellungenContent() {
     if (!email) return;
     setStorniereKey(null);
     const ids = rows
-      .filter(r => `${r.gericht_name}|${r.bestell_datum}` === g.key && r.status !== 'storniert' && r.status !== 'verfallen')
+      .filter(r => `${r.gericht_name}|${r.bestell_datum}` === g.key && r.status !== 'storniert' && r.status !== 'nicht abgeholt')
       .map(r => r.id);
     if (ids.length === 0) { ladeBestellungen(); return; }
     await tryRestoreSession();
@@ -815,47 +957,72 @@ function MeineBestellungenContent() {
         if (!dates.includes(g.bestell_datum)) dates.push(g.bestell_datum);
         await setItemAsync(cancelKey, JSON.stringify(dates));
       } catch {}
+
+      // If the cancelled order is for today, add the cancelled count to FreieEssen
+      try {
+        const today = todayIso();
+        if (g.bestell_datum === today) {
+          const cancelledCount = ids.length;
+          // Try find existing FreieEssen row for today
+          const { data: existingFrei } = await supabase.from('FreieEssen').select('*').eq('datum', today).maybeSingle();
+          if (existingFrei) {
+            const newAnzahl = (existingFrei.anzahl ?? 0) + cancelledCount;
+            await supabase.from('FreieEssen').update({ anzahl: newAnzahl }).eq('id', existingFrei.id);
+          } else {
+            // Try to find speiseplan id for the dish/date
+            const { data: sp } = await supabase.from('Speiseplan').select('id').eq('Ausgabedatum', today).eq('Gerichtname', g.gericht_name).maybeSingle();
+            const speiseplan_id = sp?.id ?? null;
+            await supabase.from('FreieEssen').insert({ speiseplan_id, datum: today, anzahl: cancelledCount });
+          }
+        }
+      } catch (e) {
+        // don't block user flow on FreieEssen failure
+        console.error('Failed to update FreieEssen on cancellation:', e);
+      }
+
       ladeBestellungen();
       refreshBookingStatus();
     }
   };
 
   return (
-    <View style={styles.scrollContent}>
-      <Text style={styles.sectionTitle}>Meine Bestellungen</Text>
-      {loading && <ActivityIndicator color="#0066cc" style={{ marginTop: 20 }} />}
-      {!!error  && <Text style={styles.errorText}>{error}</Text>}
+    <View style={{ flex: 1 }}>
+      <ScrollView style={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <Text style={styles.sectionTitle}>Meine Bestellungen</Text>
+        {loading && <ActivityIndicator color="#0066cc" style={{ marginTop: 20 }} />}
+        {!!error  && <Text style={styles.errorText}>{error}</Text>}
 
-      {!loading && (
-        <>
-          <Text style={styles.subSectionLabel}>Laufende Bestellungen:</Text>
-          {laufende.length === 0 && <Text style={styles.emptyText}>Keine laufenden Bestellungen.</Text>}
-          {laufende.map(g => (
-            <BestellungKarte
-              key={g.key} gruppe={g}
-              isEditing={editKey === g.key}
-              editMengen={editMengen}
-              editPreise={editKey === g.key ? editPreise : undefined}
-              saving={saving}
-              onEdit={() => startEdit(g)}
-              onSave={() => handleSave(g)}
-              onAbbrechen={() => setEditKey(null)}
-              onStornieren={() => setStorniereKey(g.key)}
-              onMengeChange={(kat, delta) => setEditMengen(prev => ({ ...prev, [kat]: Math.max(0, prev[kat] + delta) }))}
-            />
-          ))}
+        {!loading && (
+          <>
+            <Text style={styles.subSectionLabel}>Laufende Bestellungen:</Text>
+            {laufende.length === 0 && <Text style={styles.emptyText}>Keine laufenden Bestellungen.</Text>}
+            {laufende.map(g => (
+              <BestellungKarte
+                key={g.key} gruppe={g}
+                isEditing={editKey === g.key}
+                editMengen={editMengen}
+                editPreise={editKey === g.key ? editPreise : undefined}
+                saving={saving}
+                onEdit={() => startEdit(g)}
+                onSave={() => handleSave(g)}
+                onAbbrechen={() => setEditKey(null)}
+                onStornieren={() => setStorniereKey(g.key)}
+                onMengeChange={(kat, delta) => setEditMengen(prev => ({ ...prev, [kat]: Math.max(0, prev[kat] + delta) }))}
+              />
+            ))}
 
-          {vergangene.length > 0 && (
-            <TouchableOpacity style={styles.vergangeneHeader} onPress={() => setVergangeneOffen(v => !v)}>
-              <Text style={styles.vergangeneLabel}>Vergangene Bestellungen ({vergangene.length})</Text>
-              <Ionicons name={vergangeneOffen ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
-            </TouchableOpacity>
-          )}
-          {vergangeneOffen && vergangene.map(g => (
-            <BestellungKarte key={g.key} gruppe={g} isEditing={false} editMengen={editMengen} saving={false} vergangen />
-          ))}
-        </>
-      )}
+            {vergangene.length > 0 && (
+              <TouchableOpacity style={styles.vergangeneHeader} onPress={() => setVergangeneOffen(v => !v)}>
+                <Text style={styles.vergangeneLabel}>Vergangene Bestellungen ({vergangene.length})</Text>
+                <Ionicons name={vergangeneOffen ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+              </TouchableOpacity>
+            )}
+            {vergangeneOffen && vergangene.map(g => (
+              <BestellungKarte key={g.key} gruppe={g} isEditing={false} editMengen={editMengen} saving={false} vergangen />
+            ))}
+          </>
+        )}
+      </ScrollView>
 
       <Modal transparent visible={!!storniereKey} animationType="fade">
         <View style={styles.overlay}>
@@ -905,18 +1072,34 @@ function BestellungKarte({
     editMengen.gaeste      * preisToNumber(preisGaes)
   ).toFixed(2).replace('.', ',') + ' €';
 
+  const totalEdited = editMengen.studierende + editMengen.bedienstete + editMengen.gaeste;
+  const nextWeekLocked = isInCurrentOrNextCalendarWeek(g.bestell_datum);
+  const maxReached     = totalEdited >= MAX_BESTELLUNGEN;
+
   return (
     <View style={[styles.card, vergangen && styles.cardVergangen]}>
       <Text style={[styles.dateLabel, vergangen && styles.dateLabelVergangen]}>{isoToGerman(g.bestell_datum)}</Text>
       {!!g.image_url && <Image source={{ uri: g.image_url }} style={styles.mealImage} resizeMode="cover" />}
       <Text style={[styles.mealName, vergangen && styles.mealNameVergangen]}>{g.gericht_name}</Text>
 
+      {g.status === 'abgeholt' && (
+        <View style={styles.abgeholtBadge}>
+          <Ionicons name="checkmark-circle" size={16} color="#fff" />
+          <Text style={styles.abgeholtText}>Abgeholt</Text>
+        </View>
+      )}
+
       {isEditing ? (
         <>
-          <MengeRow label="Studierende" preis={preisStud} wert={editMengen.studierende} onPlus={() => onMengeChange?.('studierende', 1)} onMinus={() => onMengeChange?.('studierende', -1)} />
-          <MengeRow label="Bedienstete" preis={preisBed}  wert={editMengen.bedienstete} onPlus={() => onMengeChange?.('bedienstete', 1)} onMinus={() => onMengeChange?.('bedienstete', -1)} />
-          <MengeRow label="Gäste"       preis={preisGaes} wert={editMengen.gaeste}       onPlus={() => onMengeChange?.('gaeste', 1)}       onMinus={() => onMengeChange?.('gaeste', -1)} />
+          <MengeRow label="Studierende" preis={preisStud} wert={editMengen.studierende} onPlus={() => onMengeChange?.('studierende', 1)} onMinus={() => onMengeChange?.('studierende', -1)} maxReached={maxReached || nextWeekLocked} />
+          <MengeRow label="Bedienstete" preis={preisBed}  wert={editMengen.bedienstete} onPlus={() => onMengeChange?.('bedienstete', 1)} onMinus={() => onMengeChange?.('bedienstete', -1)} maxReached={maxReached || nextWeekLocked} />
+          <MengeRow label="Gäste"       preis={preisGaes} wert={editMengen.gaeste}       onPlus={() => onMengeChange?.('gaeste', 1)}       onMinus={() => onMengeChange?.('gaeste', -1)} maxReached={maxReached || nextWeekLocked} />
           <Text style={styles.kartGesamt}>Gesamt: {editGesamt}</Text>
+          {nextWeekLocked && (
+            <Text style={{ color: '#666', marginBottom: 8, fontSize: 12 }}>
+              Bestellungen für diese und die kommende Kalenderwoche können nicht mehr erhöht werden.
+            </Text>
+          )}
           <TouchableOpacity style={[styles.primaryBtn, saving && styles.btnDisabled]} onPress={onSave} disabled={saving}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Speichern</Text>}
           </TouchableOpacity>
@@ -930,7 +1113,7 @@ function BestellungKarte({
           {g.anzahl_bedienstete > 0 && <Text style={styles.karteZeile}>{g.anzahl_bedienstete}x Bedienstete</Text>}
           {g.anzahl_gaeste      > 0 && <Text style={styles.karteZeile}>{g.anzahl_gaeste}x Gäste</Text>}
           <Text style={styles.kartGesamt}>Gesamt: {g.gesamt}</Text>
-          {!vergangen && (
+          {!vergangen && g.status !== 'abgeholt' && (
             <View style={styles.aktionenRow}>
               <TouchableOpacity style={styles.stornBtn} onPress={onStornieren}><Text style={styles.stornBtnText}>Stornieren</Text></TouchableOpacity>
               <TouchableOpacity style={styles.editBtn}  onPress={onEdit}><Text style={styles.editBtnText}>Bearbeiten</Text></TouchableOpacity>
@@ -946,7 +1129,16 @@ function BestellungKarte({
 
 function AboContent() {
   const { profile, refreshBookingStatus, refreshActiveAbo, activeAbo, updateActiveAbo } = useAuthContext();
-  const email = profile?.['E-Mail'] as string | undefined;
+  const [authEmail, setAuthEmail] = useState<string | undefined>(undefined);
+  const email = (profile?.email ?? authEmail) as string | undefined;
+
+  useEffect(() => {
+    const loadAuthEmail = async () => {
+      const { data } = await supabase.auth.getUser();
+      setAuthEmail(data?.user?.email ?? undefined);
+    }
+    loadAuthEmail();
+  }, []);
 
   // Lazy initializer: if context already has abo data (loaded at login), use it immediately.
   // This means reopening the accordion shows the correct values without any DB round-trip.
@@ -1339,6 +1531,24 @@ const styles = StyleSheet.create({
   mealImage:         { width: '100%', height: 150, borderRadius: 6, marginBottom: 8 },
   mealName:          { fontSize: 15, fontWeight: '700', color: '#222', marginBottom: 4 },
   mealNameVergangen: { color: '#777' },
+
+  abgeholtBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1a7a2a',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  abgeholtText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+
   allergenText:      { fontSize: 12, color: '#888', marginBottom: 6 },
 
   ernaehrungBadge: { alignSelf: 'flex-start', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 8 },

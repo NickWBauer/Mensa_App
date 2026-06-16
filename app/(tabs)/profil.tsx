@@ -87,7 +87,7 @@ export default function Profil() {
   const matrikelnr = student?.matrikelnummer ?? '';
   const email = student?.email ?? '';
   const rzKennung = student?.username ?? String(claims?.sub ?? '');
-  const qrValue = rzKennung || 'unbekannt';
+  const qrValue = (student?.user_id ?? rzKennung) || 'unbekannt';
 
   return (
     <View style={styles.container}>
@@ -116,8 +116,6 @@ export default function Profil() {
           <View style={styles.qrWrapper}>
             <QRCode value={qrValue} size={160} />
           </View>
-
-          <Text style={styles.qrText}>{qrValue}</Text>
         </View>
 
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>

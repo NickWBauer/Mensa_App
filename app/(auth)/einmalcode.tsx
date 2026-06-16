@@ -143,8 +143,9 @@ export default function Einmalcode() {
                 value={code}
                 onChangeText={setCode}
                 placeholder="Code eingeben"
+                placeholderTextColor="#9b9b9b"
                 keyboardType="number-pad"
-                style={styles.input}
+                style={[styles.input, !code && styles.inputPlaceholder]}
                 editable={!loading}
               />
             </View>
@@ -236,25 +237,33 @@ const styles = StyleSheet.create({
   inputContainer: {
     width: '100%',
     marginTop: 18,
-    marginBottom: 14,
+    marginBottom: 18,
   },
 
   label: {
     fontSize: 13,
-    color: '#444444',
+    color: '#1f2937',
+    fontWeight: '700',
     marginBottom: 6,
   },
 
   input: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#cccccc',
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
-    color: '#111111',
+    borderColor: '#c6c6c6',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    color: '#1f2937',
     textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  inputPlaceholder: {
+    fontSize: 13,
+    fontWeight: '400',
   },
 
   button: {

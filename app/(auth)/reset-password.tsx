@@ -3,15 +3,15 @@ import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-    Alert,
-    Image,
-    ImageBackground,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ImageBackground,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function ResetPassword() {
@@ -24,6 +24,29 @@ export default function ResetPassword() {
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [sendingEmail, setSendingEmail] = React.useState(false);
+  const [mailSent, setMailSent] = React.useState(false);
+
+  async function handleSendRecoveryEmail() {
+    if (!email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse übergeben.');
+      return;
+    }
+
+    setSendingEmail(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+    setSendingEmail(false);
+
+    if (error) {
+      Alert.alert('Fehler', error.message);
+      return;
+    }
+
+    setMailSent(true);
+    Alert.alert('E-Mail gesendet', 'Der Einmalcode wurde an die E-Mail-Adresse gesendet.');
+  }
 
   async function handleResetPassword() {
     if (!email) {
@@ -100,10 +123,20 @@ export default function ResetPassword() {
             </Text>
 
             <Text style={styles.infoText}>
-              Der Einmalcode wurde an folgende Hochschul-E-Mail gesendet:
+              Der Einmalcode wird an folgende Hochschul-E-Mail gesendet:
             </Text>
 
             <Text style={styles.emailText}>{email}</Text>
+
+            <TouchableOpacity
+              style={styles.button}
+              disabled={sendingEmail}
+              onPress={handleSendRecoveryEmail}
+            >
+              <Text style={styles.buttonText}>
+                {sendingEmail ? 'Sende E-Mail...' : mailSent ? 'Einmalcode erneut senden' : 'Einmalcode senden'}
+              </Text>
+            </TouchableOpacity>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Einmalcode</Text>
@@ -111,8 +144,9 @@ export default function ResetPassword() {
                 value={code}
                 onChangeText={setCode}
                 placeholder="Einmalcode eingeben"
+                placeholderTextColor="#9b9b9b"
                 keyboardType="number-pad"
-                style={styles.input}
+                style={[styles.input, !code && styles.inputPlaceholder]}
                 editable={!loading}
               />
             </View>
@@ -123,8 +157,9 @@ export default function ResetPassword() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Neues Passwort eingeben"
+                placeholderTextColor="#9b9b9b"
                 secureTextEntry
-                style={styles.input}
+                style={[styles.input, !password && styles.inputPlaceholder]}
                 editable={!loading}
               />
             </View>
@@ -135,8 +170,9 @@ export default function ResetPassword() {
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 placeholder="Passwort erneut eingeben"
+                placeholderTextColor="#9b9b9b"
                 secureTextEntry
-                style={styles.input}
+                style={[styles.input, !confirmPassword && styles.inputPlaceholder]}
                 editable={!loading}
               />
             </View>
@@ -155,6 +191,13 @@ export default function ResetPassword() {
               <Text style={styles.buttonText}>
                 {loading ? 'Wird geändert...' : 'Passwort ändern'}
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.tertiaryButton}
+              onPress={() => router.replace('/(auth)/welcome' as any)}
+            >
+              <Text style={styles.tertiaryButtonText}>Zurück zum Login</Text>
             </TouchableOpacity>
           </View>
         </ImageBackground>
@@ -243,24 +286,32 @@ const styles = StyleSheet.create({
 
   inputContainer: {
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 18,
   },
 
   label: {
     fontSize: 13,
-    color: '#444444',
+    color: '#1f2937',
+    fontWeight: '700',
     marginBottom: 6,
   },
 
   input: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#cccccc',
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
-    color: '#111111',
+    borderColor: '#c6c6c6',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    color: '#1f2937',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  inputPlaceholder: {
+    fontSize: 13,
+    fontWeight: '400',
   },
 
   button: {
@@ -270,6 +321,18 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     alignItems: 'center',
     marginTop: 6,
+  },
+
+  tertiaryButton: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
+  tertiaryButtonText: {
+    color: '#444444',
+    fontSize: 14,
   },
 
   buttonText: {

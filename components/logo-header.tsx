@@ -30,7 +30,7 @@ type LogoHeaderProps = {
 
 const STATUS_CONFIG: Record<BookingStatus, { color: string; label: string }> = {
   gruen:  { color: '#2a9d2a', label: 'Vorbestellt' },
-  orange: { color: '#e07b00', label: 'Ausgabe läuft' },
+  orange: { color: '#e07b00', label: 'Essensausgabe' },
   rot:    { color: '#cc2222', label: 'Keine aktive Bestellung' },
 };
 

@@ -1,5 +1,7 @@
 import LogoHeader from '@/components/logo-header';
-import { Link } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { Link, useRouter } from 'expo-router';
 import React from 'react';
 import {
   Alert,
@@ -14,9 +16,14 @@ import {
 } from 'react-native';
 
 export default function Register() {
+  const router = useRouter();
+
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
+  const [isChecking, setIsChecking] = React.useState(false);
 
   const rzUsername = username.trim().toLowerCase();
   const email = `${rzUsername}@hs-esslingen.de`;
@@ -40,10 +47,57 @@ export default function Register() {
     return true;
   }
 
+  async function handleRegister() {
+    if (!validateRegistration()) return;
+
+    setIsChecking(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('username')
+        .eq('username', rzUsername)
+        .maybeSingle();
+
+      if (error) {
+        Alert.alert(
+          'Fehler',
+          'Der Benutzername konnte nicht überprüft werden.'
+        );
+        return;
+      }
+
+      if (data) {
+        Alert.alert(
+          'Benutzername bereits vergeben',
+          'Für diesen RZ-Benutzernamen existiert bereits ein Konto.'
+        );
+        return;
+      }
+
+      router.push({
+        pathname: '/(auth)/einmalcode' as any,
+        params: {
+          username: rzUsername,
+          email,
+          password,
+        },
+      });
+    } catch {
+      Alert.alert(
+        'Fehler',
+        'Bei der Registrierung ist ein Fehler aufgetreten.'
+      );
+    } finally {
+      setIsChecking(false);
+    }
+  }
+
   const canContinue =
     rzUsername.length > 0 &&
     password.length >= 6 &&
-    password === confirmPassword;
+    password === confirmPassword &&
+    !isChecking;
 
   return (
     <View style={styles.container}>
@@ -75,9 +129,10 @@ export default function Register() {
                 value={username}
                 onChangeText={setUsername}
                 placeholder="z.B. mamuwt01"
+                placeholderTextColor="#9b9b9b"
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={styles.input}
+                style={[styles.input, !username && styles.inputPlaceholder]}
               />
             </View>
 
@@ -94,25 +149,60 @@ export default function Register() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Passwort</Text>
 
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                placeholder="Passwort eingeben"
-                style={styles.input}
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder="Passwort eingeben"
+                  placeholderTextColor="#9b9b9b"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={[styles.passwordInput, !password && styles.inputPlaceholder]}
+                />
+
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color="#888888"
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Passwort wiederholen</Text>
 
-              <TextInput
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                placeholder="Passwort erneut eingeben"
-                style={styles.input}
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  placeholder="Passwort erneut eingeben"
+                  placeholderTextColor="#9b9b9b"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={[
+                    styles.passwordInput,
+                    !confirmPassword && styles.inputPlaceholder,
+                  ]}
+                />
+
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  <Ionicons
+                    name={showConfirmPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color="#888888"
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {confirmPassword.length > 0 && password !== confirmPassword ? (
@@ -121,33 +211,18 @@ export default function Register() {
               </Text>
             ) : null}
 
-            {canContinue ? (
-              <Link
-                href={{
-                  pathname: '/(auth)/einmalcode' as any,
-                  params: {
-                    username: rzUsername,
-                    email,
-                    password,
-                  },
-                }}
-                asChild
-              >
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={() => validateRegistration()}
-                >
-                  <Text style={styles.buttonText}>Registrieren</Text>
-                </TouchableOpacity>
-              </Link>
-            ) : (
-              <TouchableOpacity
-                style={[styles.button, styles.disabledButton]}
-                onPress={() => validateRegistration()}
-              >
-                <Text style={styles.buttonText}>Registrieren</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={[
+                styles.button,
+                !canContinue && styles.disabledButton,
+              ]}
+              disabled={!canContinue}
+              onPress={handleRegister}
+            >
+              <Text style={styles.buttonText}>
+                {isChecking ? 'Wird geprüft...' : 'Registrieren'}
+              </Text>
+            </TouchableOpacity>
 
             <View style={styles.divider} />
 
@@ -232,24 +307,58 @@ const styles = StyleSheet.create({
 
   inputContainer: {
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 18,
   },
 
   label: {
     fontSize: 13,
-    color: '#444444',
+    color: '#1f2937',
+    fontWeight: '700',
     marginBottom: 6,
   },
 
   input: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#cccccc',
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
-    color: '#111111',
+    borderColor: '#c6c6c6',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    color: '#1f2937',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#c6c6c6',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+  },
+
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+
+  eyeButton: {
+    borderLeftWidth: 1,
+    borderLeftColor: '#c6c6c6',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    justifyContent: 'center',
+  },
+
+  inputPlaceholder: {
+    fontSize: 13,
+    fontWeight: '400',
   },
 
   disabledInput: {

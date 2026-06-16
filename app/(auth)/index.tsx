@@ -23,8 +23,8 @@ export default function WelcomeScreen() {
             Herzlich Willkommen auf der Bestellapp der Hochschule Esslingen!
           </Text>
           <Text style={styles.text}>
-            Hier können Sie bequem Ihre Mahlzeiten vorbestellen, Ihren Speiseplan
-            einsehen, Ihr Guthaben verwalten und Ihren persönlichen QR-Code abrufen.
+            Hier können Sie bequem Ihre Mahlzeiten vorbestellen, den aktuellen Speiseplan
+            einsehen und Ihren persönlichen QR-Code abrufen.
           </Text>
           <Text style={styles.text}>
             Wir wünschen Ihnen einen guten Appetit und viel Freude beim Bestellen!

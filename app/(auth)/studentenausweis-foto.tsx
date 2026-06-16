@@ -5,16 +5,16 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  ImageBackground,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    ImageBackground,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 export default function StudentenausweisFoto() {
@@ -295,8 +295,9 @@ export default function StudentenausweisFoto() {
                 value={vorname}
                 onChangeText={setVorname}
                 placeholder="Vorname"
+                placeholderTextColor="#9b9b9b"
                 editable={fieldsEnabled}
-                style={[styles.input, !fieldsEnabled && styles.disabledInput]}
+                style={[styles.input, !vorname && styles.inputPlaceholder, !fieldsEnabled && styles.disabledInput]}
               />
             </View>
 
@@ -306,8 +307,9 @@ export default function StudentenausweisFoto() {
                 value={nachname}
                 onChangeText={setNachname}
                 placeholder="Nachname"
+                placeholderTextColor="#9b9b9b"
                 editable={fieldsEnabled}
-                style={[styles.input, !fieldsEnabled && styles.disabledInput]}
+                style={[styles.input, !nachname && styles.inputPlaceholder, !fieldsEnabled && styles.disabledInput]}
               />
             </View>
 
@@ -317,9 +319,10 @@ export default function StudentenausweisFoto() {
                 value={matrikelnummer}
                 onChangeText={setMatrikelnummer}
                 placeholder="Matrikelnummer"
+                placeholderTextColor="#9b9b9b"
                 keyboardType="number-pad"
                 editable={fieldsEnabled}
-                style={[styles.input, !fieldsEnabled && styles.disabledInput]}
+                style={[styles.input, !matrikelnummer && styles.inputPlaceholder, !fieldsEnabled && styles.disabledInput]}
               />
             </View>
 
@@ -420,24 +423,32 @@ const styles = StyleSheet.create({
 
   inputContainer: {
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 18,
   },
 
   label: {
     fontSize: 13,
-    color: '#444444',
+    color: '#1f2937',
+    fontWeight: '700',
     marginBottom: 6,
   },
 
   input: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#cccccc',
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
-    color: '#111111',
+    borderColor: '#c6c6c6',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    color: '#1f2937',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  inputPlaceholder: {
+    fontSize: 13,
+    fontWeight: '400',
   },
 
   disabledInput: {
