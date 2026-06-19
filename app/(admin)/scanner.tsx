@@ -158,6 +158,10 @@ export default function Scanner() {
       if (byEmail.error) throw byEmail.error;
     }
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    if (!isUuid) return null;
+
     const byUserId = await supabase
       .from('students')
       .select('email, username, user_id')

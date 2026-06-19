@@ -25,10 +25,6 @@ const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 const ALLE_ALLERGENE = ['Gluten', 'Milch', 'Ei', 'Fisch', 'Sellerie', 'Senf', 'Nüsse', 'Soja', 'Sesam'];
 const MAX_BESTELLUNGEN = 3;
 
-const EMAILJS_API_URL = 'https://api.emailjs.com/api/v1.0/email/send';
-const EMAILJS_SERVICE_ID = 'service_46zmvnc';
-const EMAILJS_TEMPLATE_ID = 'template_ugos18i';
-const EMAILJS_PUBLIC_KEY = '83oOfEchy894C2Az9';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -93,7 +89,10 @@ function isInCurrentOrNextCalendarWeek(iso: string): boolean {
   return target >= currentMonday && target <= nextWeekSunday;
 }
 
-async function sendOrderConfirmationEmail(user: { email?: string | null; user_metadata?: any }, orderRows: Omit<BestellungRow, 'id'>[]) {
+async function sendOrderConfirmationEmail(
+  user: { email?: string | null; user_metadata?: any },
+  orderRows: Omit<BestellungRow, 'id'>[]
+) {
   if (!user?.email) {
     throw new Error('Keine gültige Empfänger-E-Mail gefunden.');
   }
@@ -104,30 +103,35 @@ async function sendOrderConfirmationEmail(user: { email?: string | null; user_me
 
   const totalPrice = orderRows.reduce((sum, row) => sum + preisToNumber(row.preis), 0);
 
-  const body = {
-    service_id: EMAILJS_SERVICE_ID,
-    template_id: EMAILJS_TEMPLATE_ID,
-    user_id: EMAILJS_PUBLIC_KEY,
-    template_params: {
-      to_email: user.email,
-      name: user.user_metadata?.full_name || user.email,
-      gericht: orderSummary,
-      preis: formatPrice(totalPrice),
-      datum: orderRows[0]?.bestell_datum ? isoToShort(orderRows[0].bestell_datum) : '-',
-    },
-  };
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
 
-  const response = await fetch(EMAILJS_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  if (!accessToken) {
+    throw new Error('Keine aktive Session – bitte erneut einloggen.');
+  }
+
+  const response = await fetch(
+    `${supabase.supabaseUrl}/functions/v1/send-order-email`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': supabase.supabaseKey,
+      },
+      body: JSON.stringify({
+        to_email: user.email,
+        name: user.user_metadata?.full_name || user.email,
+        gericht: orderSummary,
+        preis: formatPrice(totalPrice),
+        datum: orderRows[0]?.bestell_datum ? isoToShort(orderRows[0].bestell_datum) : '-',
+      }),
+    }
+  );
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Bestätigungsmail konnte nicht gesendet werden. ${text}`);
+    throw new Error(`Bestätigungsmail konnte nicht gesendet werden: ${text}`);
   }
 }
 
