@@ -67,7 +67,7 @@ export default function Einmalcode() {
       password,
     });
 
-    if (passwordError) {
+    if (passwordError && !passwordError.message.toLowerCase().includes('different')) {
       setLoading(false);
       Alert.alert('Fehler beim Passwort', passwordError.message);
       return;
