@@ -86,27 +86,18 @@ export default function Register() {
         return;
       }
 
-      const { error: authEmailCheckError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: false,
-        },
-      });
+      const { data: authUserExists, error: authUserExistsError } =
+        await supabase.rpc('is_auth_user_registered', {
+          check_email: email,
+        });
 
-      if (!authEmailCheckError) {
-        setRegistrationError('Nutzer bereits registriert.');
+      if (authUserExistsError) {
+        setRegistrationError('E-Mail-Adresse konnte nicht geprüft werden. Bitte später erneut versuchen.');
         return;
       }
 
-      const authErrorText = authEmailCheckError.message.toLowerCase();
-      const emailNotFound =
-        authErrorText.includes('user not found') ||
-        authErrorText.includes('no user found') ||
-        authErrorText.includes('email not found') ||
-        authErrorText.includes('not found');
-
-      if (!emailNotFound) {
-        setRegistrationError('E-Mail-Adresse konnte nicht geprüft werden.');
+      if (authUserExists === true) {
+        setRegistrationError('Nutzer bereits registriert.');
         return;
       }
 
