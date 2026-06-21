@@ -2,7 +2,7 @@ import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import {
     ActivityIndicator,
@@ -18,7 +18,6 @@ import {
 } from 'react-native';
 
 export default function StudentenausweisFoto() {
-  const router = useRouter();
   const { signIn } = useAuthContext();
 
   const params = useLocalSearchParams();
@@ -181,8 +180,6 @@ export default function StudentenausweisFoto() {
       await signIn(username);
 
       setLoading(false);
-
-      router.replace('/(tabs)' as any);
     } catch (error) {
       console.log('SAVE ERROR:', error);
 

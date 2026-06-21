@@ -6,15 +6,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { setItemAsync } from 'expo-secure-store';
 import React from 'react';
 import {
-    Alert,
-    Image,
-    ImageBackground,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ImageBackground,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function Einmalcode() {
@@ -58,24 +58,6 @@ export default function Einmalcode() {
     }
 
     if (existingEmail) {
-      Alert.alert(
-        'E-Mail bereits registriert',
-        'Für diese Hochschul-E-Mail existiert bereits ein Konto.'
-      );
-      return true;
-    }
-
-    const { data: authUserExists, error: authUserExistsError } =
-      await supabase.rpc('is_auth_user_registered', {
-        check_email: email,
-      });
-
-    if (authUserExistsError) {
-      Alert.alert('Fehler', 'Die E-Mail-Adresse konnte nicht geprüft werden. Bitte später erneut versuchen.');
-      return true;
-    }
-
-    if (authUserExists === true) {
       Alert.alert(
         'E-Mail bereits registriert',
         'Für diese Hochschul-E-Mail existiert bereits ein Konto.'
