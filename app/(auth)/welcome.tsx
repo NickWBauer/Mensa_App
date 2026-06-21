@@ -1,8 +1,10 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
+import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/providers/auth-provider';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
+import { setItemAsync } from 'expo-secure-store';
 import React from 'react';
 import {
     Alert,
@@ -54,7 +56,6 @@ export default function Welcome() {
       if (admin) {
         await signIn(rzUsername);
         setLoading(false);
-        router.replace('/(admin)/uebersicht' as any);
         return;
       }
 
@@ -69,10 +70,17 @@ export default function Welcome() {
         return;
       }
 
+      if (data.session?.access_token && data.session?.refresh_token) {
+        await Promise.all([
+          setItemAsync(ACCESS_TOKEN_KEY, data.session.access_token),
+          setItemAsync(REFRESH_TOKEN_KEY, data.session.refresh_token),
+        ]);
+      }
+
       await signIn(rzUsername);
 
       setLoading(false);
-      router.replace('/(tabs)/bestellungen' as any);
+      return;
     } catch (error) {
       console.error('Login Fehler:', error);
       setErrorMessage(
@@ -96,7 +104,7 @@ export default function Welcome() {
     const email = `${rzUsername}@hs-esslingen.de`;
 
     router.replace({
-      pathname: '/reset-password',
+      pathname: '/(auth)/reset-password',
       params: { email },
     } as any);
   }

@@ -24,6 +24,7 @@ export default function Register() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [isChecking, setIsChecking] = React.useState(false);
+  const [registrationError, setRegistrationError] = React.useState('');
 
   const rzUsername = username.trim().toLowerCase();
   const email = `${rzUsername}@hs-esslingen.de`;
@@ -50,28 +51,62 @@ export default function Register() {
   async function handleRegister() {
     if (!validateRegistration()) return;
 
+    setRegistrationError('');
     setIsChecking(true);
 
     try {
-      const { data, error } = await supabase
+      const [{ data: existingByUsername, error: usernameError }, { data: existingByEmail, error: emailError }] = await Promise.all([
+        supabase
         .from('students')
         .select('username')
         .eq('username', rzUsername)
-        .maybeSingle();
+        .maybeSingle(),
+        supabase
+          .from('students')
+          .select('email')
+          .eq('email', email)
+          .maybeSingle(),
+      ]);
 
-      if (error) {
+      if (usernameError || emailError) {
         Alert.alert(
           'Fehler',
-          'Der Benutzername konnte nicht überprüft werden.'
+          'Der Benutzername oder die E-Mail konnte nicht überprüft werden.'
         );
         return;
       }
 
-      if (data) {
-        Alert.alert(
-          'Benutzername bereits vergeben',
-          'Für diesen RZ-Benutzernamen existiert bereits ein Konto.'
-        );
+      if (existingByUsername) {
+        setRegistrationError('Nutzer bereits registriert.');
+        return;
+      }
+
+      if (existingByEmail) {
+        setRegistrationError('Nutzer bereits registriert.');
+        return;
+      }
+
+      const { error: authEmailCheckError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,
+        },
+      });
+
+      if (!authEmailCheckError) {
+        setRegistrationError('Nutzer bereits registriert.');
+        return;
+      }
+
+      const authErrorText = authEmailCheckError.message.toLowerCase();
+      const emailNotFound =
+        authErrorText.includes('user not found') ||
+        authErrorText.includes('no user found') ||
+        authErrorText.includes('email not found') ||
+        authErrorText.includes('not found');
+
+      if (!emailNotFound) {
+        setRegistrationError('E-Mail-Adresse konnte nicht geprüft werden.');
         return;
       }
 
@@ -127,7 +162,10 @@ export default function Register() {
 
               <TextInput
                 value={username}
-                onChangeText={setUsername}
+                onChangeText={(text) => {
+                  setUsername(text);
+                  setRegistrationError('');
+                }}
                 placeholder="z.B. mamuwt01"
                 placeholderTextColor="#9b9b9b"
                 autoCapitalize="none"
@@ -152,7 +190,10 @@ export default function Register() {
               <View style={styles.passwordRow}>
                 <TextInput
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setRegistrationError('');
+                  }}
                   secureTextEntry={!showPassword}
                   placeholder="Passwort eingeben"
                   placeholderTextColor="#9b9b9b"
@@ -180,7 +221,10 @@ export default function Register() {
               <View style={styles.passwordRow}>
                 <TextInput
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    setRegistrationError('');
+                  }}
                   secureTextEntry={!showConfirmPassword}
                   placeholder="Passwort erneut eingeben"
                   placeholderTextColor="#9b9b9b"
@@ -209,6 +253,10 @@ export default function Register() {
               <Text style={styles.errorText}>
                 Die Passwörter stimmen nicht überein.
               </Text>
+            ) : null}
+
+            {registrationError ? (
+              <Text style={styles.errorText}>{registrationError}</Text>
             ) : null}
 
             <TouchableOpacity

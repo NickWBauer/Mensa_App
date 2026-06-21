@@ -1,18 +1,20 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
+import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/providers/auth-provider';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { setItemAsync } from 'expo-secure-store';
 import React from 'react';
 import {
-  Alert,
-  Image,
-  ImageBackground,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    ImageBackground,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 export default function Einmalcode() {
@@ -28,7 +30,47 @@ export default function Einmalcode() {
   const [code, setCode] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
+  async function hasExistingRegistration() {
+    const [{ data: existingUsername, error: usernameError }, { data: existingEmail, error: emailError }] = await Promise.all([
+      supabase
+        .from('students')
+        .select('username')
+        .eq('username', username)
+        .maybeSingle(),
+      supabase
+        .from('students')
+        .select('email')
+        .eq('email', email)
+        .maybeSingle(),
+    ]);
+
+    if (usernameError || emailError) {
+      Alert.alert('Fehler', 'Die Registrierungsdaten konnten nicht geprüft werden.');
+      return true;
+    }
+
+    if (existingUsername) {
+      Alert.alert(
+        'Benutzername bereits vergeben',
+        'Für diesen RZ-Benutzernamen existiert bereits ein Konto.'
+      );
+      return true;
+    }
+
+    if (existingEmail) {
+      Alert.alert(
+        'E-Mail bereits registriert',
+        'Für diese Hochschul-E-Mail existiert bereits ein Konto.'
+      );
+      return true;
+    }
+
+    return false;
+  }
+
   async function sendCode() {
+    if (await hasExistingRegistration()) return;
+
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithOtp({
@@ -49,6 +91,8 @@ export default function Einmalcode() {
   }
 
   async function verifyCode() {
+    if (await hasExistingRegistration()) return;
+
     setLoading(true);
 
     const { data, error } = await supabase.auth.verifyOtp({
@@ -61,6 +105,13 @@ export default function Einmalcode() {
       setLoading(false);
       Alert.alert('Fehler', error.message);
       return;
+    }
+
+    if (data.session?.access_token && data.session?.refresh_token) {
+      await Promise.all([
+        setItemAsync(ACCESS_TOKEN_KEY, data.session.access_token),
+        setItemAsync(REFRESH_TOKEN_KEY, data.session.refresh_token),
+      ]);
     }
 
     const { error: passwordError } = await supabase.auth.updateUser({

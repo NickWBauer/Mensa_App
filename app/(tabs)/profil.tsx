@@ -3,12 +3,12 @@ import { useAuthContext } from '@/hooks/use-auth-context';
 import { supabase } from '@/lib/supabase';
 import React from 'react';
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
@@ -40,7 +40,12 @@ export default function Profil() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      console.error('Fehler beim Laden des Users:', userError);
+      if (userError?.message?.toLowerCase().includes('auth session missing')) {
+        await signOut();
+        setLoading(false);
+        return;
+      }
+      console.warn('Fehler beim Laden des Users:', userError);
       setLoading(false);
       return;
     }
