@@ -1,6 +1,6 @@
 import LogoHeader from '@/components/logo-header';
 import { useAuthContext } from '@/hooks/use-auth-context';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { getItemAsync, setItemAsync } from 'expo-secure-store';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -111,13 +111,13 @@ async function sendOrderConfirmationEmail(
   }
 
   const response = await fetch(
-    `${supabase.supabaseUrl}/functions/v1/send-order-email`,
+    `${supabaseUrl}/functions/v1/send-order-email`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
-        'apikey': supabase.supabaseKey,
+        'apikey': supabaseAnonKey,
       },
       body: JSON.stringify({
         to_email: user.email,
@@ -614,8 +614,6 @@ function VorbestellungContent() {
         const w = mengen[meal.id] ?? { studierende: 0, bedienstete: 0, gaeste: 0 };
         const datumVoll = (bestandPerDatum[meal.Ausgabedatum] ?? 0) + (sessionCountPerDatum[meal.Ausgabedatum] ?? 0) >= MAX_BESTELLUNGEN;
         const bm = bestandPerMeal[`${meal.Gerichtname}|${meal.Ausgabedatum}`];
-        const mealDow = isoToDate(meal.Ausgabedatum).getDay();
-        const isAboDay = !!(activeAbo?.aktiv && activeAbo.wochentage.includes(mealDow));
         return (
           <View key={meal.id} style={styles.card}>
             <Text style={styles.dateLabel}>{isoToGerman(meal.Ausgabedatum)}</Text>
@@ -633,21 +631,18 @@ function VorbestellungContent() {
                   <View style={styles.bestandZeile}>
                     <Ionicons name="checkmark-circle-outline" size={12} color="#226622" />
                     <Text style={styles.bestandZeileText}>{bm.studierende}× Studierende</Text>
-                    {isAboDay && <Text style={styles.aboTag}>(Abo)</Text>}
                   </View>
                 )}
                 {bm.bedienstete > 0 && (
                   <View style={styles.bestandZeile}>
                     <Ionicons name="checkmark-circle-outline" size={12} color="#226622" />
                     <Text style={styles.bestandZeileText}>{bm.bedienstete}× Bedienstete</Text>
-                    {isAboDay && <Text style={styles.aboTag}>(Abo)</Text>}
                   </View>
                 )}
                 {bm.gaeste > 0 && (
                   <View style={styles.bestandZeile}>
                     <Ionicons name="checkmark-circle-outline" size={12} color="#226622" />
                     <Text style={styles.bestandZeileText}>{bm.gaeste}× Gäste</Text>
-                    {isAboDay && <Text style={styles.aboTag}>(Abo)</Text>}
                   </View>
                 )}
               </View>
@@ -1649,7 +1644,6 @@ const styles = StyleSheet.create({
   bestandBlock: { marginTop: 6, marginBottom: 2, gap: 3 },
   bestandZeile: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   bestandZeileText: { fontSize: 13, fontWeight: '600', color: '#226622' },
-  aboTag: { fontSize: 11, color: '#888', fontWeight: '500' },
 
   // Abo-Info-Box
   aboInfoBox: {

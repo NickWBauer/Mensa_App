@@ -7,9 +7,12 @@ const ExpoSecureStoreAdapter = {
   removeItem: (key: string) => deleteItemAsync(key),
 }
 
+export const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'http://212.71.201.100:8000';
+export const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTk4NTIzLCJleHAiOjE5MzkyNzg1MjN9.uv8Wigy92Vg448yYm5GXSCnvZBfBPBFZy96CBtkCD5M';
+
 export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'http://212.71.201.100:8000',
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTk4NTIzLCJleHAiOjE5MzkyNzg1MjN9.uv8Wigy92Vg448yYm5GXSCnvZBfBPBFZy96CBtkCD5M',
+  supabaseUrl,
+  supabaseAnonKey,
   {
     auth: {
       storage: ExpoSecureStoreAdapter as any,
